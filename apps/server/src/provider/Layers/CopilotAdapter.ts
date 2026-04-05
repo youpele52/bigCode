@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { chmodSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import {
   EventId,
@@ -51,6 +52,36 @@ const DEFAULT_BINARY_PATH = "copilot";
 const USER_INPUT_QUESTION_ID = "answer";
 
 /**
+ * Resolves the path to the bundled @github/copilot index.js CLI entry point.
+ *
+ * Bun installs @github/copilot-sdk and @github/copilot as siblings inside the
+ * same .bun/<pkg>/node_modules/@github/ directory. We resolve the copilot-sdk
+ * main entry (always resolvable since it is an explicit dependency), then
+ * navigate up to the @github/ directory and append copilot/index.js.
+ *
+ * The CJS entry is at dist/cjs/index.js (3 levels up = @github/).
+ * The ESM entry is at dist/index.js      (2 levels up = @github/).
+ * We try both depths so this works regardless of which entry is resolved.
+ */
+function resolveCopilotCliPath(): string | undefined {
+  try {
+    const req = createRequire(import.meta.url);
+    const sdkMain = req.resolve("@github/copilot-sdk");
+    const sdkMainDir = dirname(sdkMain);
+    for (const githubDir of [
+      join(sdkMainDir, "..", "..", ".."), // dist/cjs/index.js -> @github/
+      join(sdkMainDir, "..", ".."), //       dist/index.js     -> @github/
+    ]) {
+      const candidate = join(githubDir, "copilot", "index.js");
+      if (existsSync(candidate)) return candidate;
+    }
+  } catch {
+    // fall through
+  }
+  return undefined;
+}
+
+/**
  * When running inside Electron, `process.execPath` is the Electron binary and
  * `process.versions.electron` is set. The Copilot SDK's `getNodeExecPath()`
  * returns `process.execPath`, so it spawns the copilot CLI via the Electron
@@ -59,17 +90,24 @@ const USER_INPUT_QUESTION_ID = "answer";
  * slicing argv from index 1 instead of 2, making the script path appear as a
  * positional argument: "too many arguments. Expected 0 but got 1".
  *
- * The fix: pass a `cliPath` pointing to a tiny shell wrapper that execs the
- * real `node` binary. The SDK will spawn the wrapper directly (not via
- * `getNodeExecPath()`), and since it is a shell script rather than a .js file,
- * `process.versions.electron` is never set in the spawned process.
+ * The fix: pass a `cliPath` pointing to a shell wrapper that invokes the real
+ * `node` binary with the copilot index.js path baked in. The SDK spawns
+ * `wrapper.sh [cli-args]`, which becomes `node /path/to/index.js [cli-args]`.
+ * Since the wrapper is not a .js file, the SDK uses it directly as the
+ * executable (not via `getNodeExecPath()`), and the real node process has no
+ * `process.versions.electron`, so Commander.js parses argv correctly.
  *
- * Returns `undefined` when not running in Electron (no-op).
+ * Returns `undefined` when not running in Electron, or if the copilot CLI
+ * path cannot be resolved (SDK will fall back to its default behaviour).
  */
 export function makeNodeWrapperCliPath(): string | undefined {
   if (!("electron" in process.versions)) return undefined;
+  const cliPath = resolveCopilotCliPath();
+  if (!cliPath) return undefined;
   const wrapperPath = join(tmpdir(), `copilot-node-wrapper-${randomUUID()}.sh`);
-  writeFileSync(wrapperPath, '#!/bin/sh\nexec node "$@"\n', "utf8");
+  // Bake the copilot script path into the wrapper so `exec node <path> "$@"`
+  // receives the CLI flags as script arguments, not as node options.
+  writeFileSync(wrapperPath, `#!/bin/sh\nexec node ${JSON.stringify(cliPath)} "$@"\n`, "utf8");
   chmodSync(wrapperPath, 0o755);
   return wrapperPath;
 }
