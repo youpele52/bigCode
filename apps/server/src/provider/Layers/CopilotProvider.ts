@@ -115,6 +115,15 @@ function makeClient(binaryPath: string) {
     ...(useCustomBinary ? { cliPath: binaryPath } : {}),
     logLevel: "error",
     autoStart: true,
+    // When running inside Electron (process.execPath is the Electron binary),
+    // the SDK's getNodeExecPath() returns the Electron binary and spawns the
+    // bundled copilot CLI as: spawn(electronBinary, [index.js, ...]).
+    // Without ELECTRON_RUN_AS_NODE=1 in the child env, Electron rejects index.js
+    // as an unexpected positional argument. Setting it here causes the spawned
+    // Electron process to run in Node.js mode, executing index.js correctly.
+    ...("electron" in process.versions
+      ? { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } }
+      : {}),
   });
 }
 

@@ -754,6 +754,14 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
         ...(useCustomBinary ? { cliPath: copilotSettings.binaryPath } : {}),
         ...(input.cwd ? { cwd: input.cwd } : {}),
         logLevel: "error",
+        // When running inside Electron, process.execPath is the Electron binary.
+        // The SDK's getNodeExecPath() returns it and spawns the bundled copilot CLI
+        // as: spawn(electronBinary, [index.js, ...]). Without ELECTRON_RUN_AS_NODE=1
+        // in the child env, Electron rejects index.js as an unexpected positional
+        // argument. Setting it here causes the spawned process to run in Node mode.
+        ...("electron" in process.versions
+          ? { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } }
+          : {}),
       };
       const client = options?.clientFactory?.(clientOptions) ?? new CopilotClient(clientOptions);
       const pendingApprovals = new Map<string, PendingApprovalRequest>();
