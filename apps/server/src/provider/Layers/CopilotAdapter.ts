@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { chmodSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   EventId,
@@ -46,6 +49,30 @@ import type {
 const PROVIDER = "copilot" as const;
 const DEFAULT_BINARY_PATH = "copilot";
 const USER_INPUT_QUESTION_ID = "answer";
+
+/**
+ * When running inside Electron, `process.execPath` is the Electron binary and
+ * `process.versions.electron` is set. The Copilot SDK's `getNodeExecPath()`
+ * returns `process.execPath`, so it spawns the copilot CLI via the Electron
+ * binary. The cached `app.js` uses Commander.js, which detects
+ * `process.versions.electron` and switches to "electron" parse mode —
+ * slicing argv from index 1 instead of 2, making the script path appear as a
+ * positional argument: "too many arguments. Expected 0 but got 1".
+ *
+ * The fix: pass a `cliPath` pointing to a tiny shell wrapper that execs the
+ * real `node` binary. The SDK will spawn the wrapper directly (not via
+ * `getNodeExecPath()`), and since it is a shell script rather than a .js file,
+ * `process.versions.electron` is never set in the spawned process.
+ *
+ * Returns `undefined` when not running in Electron (no-op).
+ */
+export function makeNodeWrapperCliPath(): string | undefined {
+  if (!("electron" in process.versions)) return undefined;
+  const wrapperPath = join(tmpdir(), `copilot-node-wrapper-${randomUUID()}.sh`);
+  writeFileSync(wrapperPath, '#!/bin/sh\nexec node "$@"\n', "utf8");
+  chmodSync(wrapperPath, 0o755);
+  return wrapperPath;
+}
 
 interface PendingApprovalRequest {
   readonly requestType:
@@ -750,18 +777,16 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
         Effect.orDie,
       );
       const useCustomBinary = copilotSettings.binaryPath !== DEFAULT_BINARY_PATH;
+      // When running in Electron, use a shell wrapper as cliPath so the copilot
+      // CLI is spawned via the real `node` binary rather than the Electron binary.
+      // See makeNodeWrapperCliPath() for full explanation.
+      const resolvedCliPath = useCustomBinary
+        ? copilotSettings.binaryPath
+        : makeNodeWrapperCliPath();
       const clientOptions: CopilotClientOptions = {
-        ...(useCustomBinary ? { cliPath: copilotSettings.binaryPath } : {}),
+        ...(resolvedCliPath !== undefined ? { cliPath: resolvedCliPath } : {}),
         ...(input.cwd ? { cwd: input.cwd } : {}),
         logLevel: "error",
-        // When running inside Electron, process.execPath is the Electron binary.
-        // The SDK's getNodeExecPath() returns it and spawns the bundled copilot CLI
-        // as: spawn(electronBinary, [index.js, ...]). Without ELECTRON_RUN_AS_NODE=1
-        // in the child env, Electron rejects index.js as an unexpected positional
-        // argument. Setting it here causes the spawned process to run in Node mode.
-        ...("electron" in process.versions
-          ? { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } }
-          : {}),
       };
       const client = options?.clientFactory?.(clientOptions) ?? new CopilotClient(clientOptions);
       const pendingApprovals = new Map<string, PendingApprovalRequest>();
