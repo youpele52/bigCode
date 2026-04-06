@@ -1,0 +1,391 @@
+import { useCallback, useRef, useState, type MouseEvent } from "react";
+import { type ThreadId, type ProjectId } from "@t3tools/contracts";
+import { isMacPlatform, newCommandId } from "../../lib/utils";
+import { useUiStateStore } from "../../stores/ui";
+import { useThreadSelectionStore } from "../../stores/thread";
+import { useThreadActions } from "../../hooks/useThreadActions";
+import { useSettings } from "../../hooks/useSettings";
+import { readNativeApi } from "../../rpc/nativeApi";
+import { toastManager } from "../ui/toast";
+import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
+import type { SidebarThreadSummary } from "../../models/types";
+
+export interface SidebarThreadActionsInput {
+  sidebarThreadsById: Record<ThreadId, SidebarThreadSummary | undefined>;
+  projectCwdById: Map<ProjectId, string>;
+  appSettings: ReturnType<typeof useSettings>;
+  /** Navigates to a thread route and clears multi-selection. */
+  navigateToThreadRoute: (threadId: ThreadId) => void;
+}
+
+export interface SidebarThreadActionsOutput {
+  // Rename state
+  renamingThreadId: ThreadId | null;
+  renamingTitle: string;
+  setRenamingTitle: (title: string) => void;
+  renamingInputRef: React.MutableRefObject<HTMLInputElement | null>;
+  renamingCommittedRef: React.MutableRefObject<boolean>;
+  cancelRename: () => void;
+  commitRename: (threadId: ThreadId, newTitle: string, originalTitle: string) => Promise<void>;
+  // Archive confirm state
+  confirmingArchiveThreadId: ThreadId | null;
+  setConfirmingArchiveThreadId: React.Dispatch<React.SetStateAction<ThreadId | null>>;
+  confirmArchiveButtonRefs: React.MutableRefObject<Map<ThreadId, HTMLButtonElement>>;
+  attemptArchiveThread: (threadId: ThreadId) => Promise<void>;
+  // Selection
+  selectedThreadIds: ReadonlySet<ThreadId>;
+  clearSelection: () => void;
+  // Handlers
+  handleThreadClick: (
+    event: MouseEvent,
+    threadId: ThreadId,
+    orderedProjectThreadIds: readonly ThreadId[],
+  ) => void;
+  navigateToThread: (threadId: ThreadId) => void;
+  handleThreadContextMenu: (
+    threadId: ThreadId,
+    position: { x: number; y: number },
+  ) => Promise<void>;
+  handleMultiSelectContextMenu: (position: { x: number; y: number }) => Promise<void>;
+  openPrLink: (event: MouseEvent<HTMLElement>, prUrl: string) => void;
+}
+
+/** Encapsulates all thread-level actions for the sidebar. */
+export function useSidebarThreadActions({
+  sidebarThreadsById,
+  projectCwdById,
+  appSettings,
+  navigateToThreadRoute,
+}: SidebarThreadActionsInput): SidebarThreadActionsOutput {
+  const markThreadUnread = useUiStateStore((store) => store.markThreadUnread);
+  const selectedThreadIds = useThreadSelectionStore((s) => s.selectedThreadIds);
+  const toggleThreadSelection = useThreadSelectionStore((s) => s.toggleThread);
+  const rangeSelectTo = useThreadSelectionStore((s) => s.rangeSelectTo);
+  const clearSelection = useThreadSelectionStore((s) => s.clearSelection);
+  const removeFromSelection = useThreadSelectionStore((s) => s.removeFromSelection);
+  const setSelectionAnchor = useThreadSelectionStore((s) => s.setAnchor);
+  const { archiveThread, deleteThread } = useThreadActions();
+
+  const [renamingThreadId, setRenamingThreadId] = useState<ThreadId | null>(null);
+  const [renamingTitle, setRenamingTitle] = useState("");
+  const [confirmingArchiveThreadId, setConfirmingArchiveThreadId] = useState<ThreadId | null>(null);
+  const renamingCommittedRef = useRef(false);
+  const renamingInputRef = useRef<HTMLInputElement | null>(null);
+  const confirmArchiveButtonRefs = useRef(new Map<ThreadId, HTMLButtonElement>());
+
+  const { copyToClipboard: copyThreadIdToClipboard } = useCopyToClipboard<{
+    threadId: ThreadId;
+  }>({
+    onCopy: (ctx) => {
+      toastManager.add({
+        type: "success",
+        title: "Thread ID copied",
+        description: ctx.threadId,
+      });
+    },
+    onError: (error) => {
+      toastManager.add({
+        type: "error",
+        title: "Failed to copy thread ID",
+        description: error instanceof Error ? error.message : "An error occurred.",
+      });
+    },
+  });
+
+  const { copyToClipboard: copyPathToClipboard } = useCopyToClipboard<{ path: string }>({
+    onCopy: (ctx) => {
+      toastManager.add({
+        type: "success",
+        title: "Path copied",
+        description: ctx.path,
+      });
+    },
+    onError: (error) => {
+      toastManager.add({
+        type: "error",
+        title: "Failed to copy path",
+        description: error instanceof Error ? error.message : "An error occurred.",
+      });
+    },
+  });
+
+  const cancelRename = useCallback(() => {
+    setRenamingThreadId(null);
+    renamingInputRef.current = null;
+  }, []);
+
+  const commitRename = useCallback(
+    async (threadId: ThreadId, newTitle: string, originalTitle: string) => {
+      const finishRename = () => {
+        setRenamingThreadId((current) => {
+          if (current !== threadId) return current;
+          renamingInputRef.current = null;
+          return null;
+        });
+      };
+
+      const trimmed = newTitle.trim();
+      if (trimmed.length === 0) {
+        toastManager.add({
+          type: "warning",
+          title: "Thread title cannot be empty",
+        });
+        finishRename();
+        return;
+      }
+      if (trimmed === originalTitle) {
+        finishRename();
+        return;
+      }
+      const api = readNativeApi();
+      if (!api) {
+        finishRename();
+        return;
+      }
+      try {
+        await api.orchestration.dispatchCommand({
+          type: "thread.meta.update",
+          commandId: newCommandId(),
+          threadId,
+          title: trimmed,
+        });
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: "Failed to rename thread",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+      }
+      finishRename();
+    },
+    [],
+  );
+
+  const attemptArchiveThread = useCallback(
+    async (threadId: ThreadId) => {
+      try {
+        await archiveThread(threadId);
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: "Failed to archive thread",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+      }
+    },
+    [archiveThread],
+  );
+
+  const openPrLink = useCallback((event: MouseEvent<HTMLElement>, prUrl: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const api = readNativeApi();
+    if (!api) {
+      toastManager.add({
+        type: "error",
+        title: "Link opening is unavailable.",
+      });
+      return;
+    }
+
+    void api.shell.openExternal(prUrl).catch((error) => {
+      toastManager.add({
+        type: "error",
+        title: "Unable to open PR link",
+        description: error instanceof Error ? error.message : "An error occurred.",
+      });
+    });
+  }, []);
+
+  const navigateToThread = useCallback(
+    (threadId: ThreadId) => {
+      if (selectedThreadIds.size > 0) {
+        clearSelection();
+      }
+      setSelectionAnchor(threadId);
+      navigateToThreadRoute(threadId);
+    },
+    [clearSelection, navigateToThreadRoute, selectedThreadIds.size, setSelectionAnchor],
+  );
+
+  const handleThreadClick = useCallback(
+    (event: MouseEvent, threadId: ThreadId, orderedProjectThreadIds: readonly ThreadId[]) => {
+      const isMac = isMacPlatform(navigator.platform);
+      const isModClick = isMac ? event.metaKey : event.ctrlKey;
+      const isShiftClick = event.shiftKey;
+
+      if (isModClick) {
+        event.preventDefault();
+        toggleThreadSelection(threadId);
+        return;
+      }
+
+      if (isShiftClick) {
+        event.preventDefault();
+        rangeSelectTo(threadId, orderedProjectThreadIds);
+        return;
+      }
+
+      if (selectedThreadIds.size > 0) {
+        clearSelection();
+      }
+      setSelectionAnchor(threadId);
+      navigateToThreadRoute(threadId);
+    },
+    [
+      clearSelection,
+      navigateToThreadRoute,
+      rangeSelectTo,
+      selectedThreadIds.size,
+      setSelectionAnchor,
+      toggleThreadSelection,
+    ],
+  );
+
+  const handleThreadContextMenu = useCallback(
+    async (threadId: ThreadId, position: { x: number; y: number }) => {
+      const api = readNativeApi();
+      if (!api) return;
+      const thread = sidebarThreadsById[threadId];
+      if (!thread) return;
+      const threadWorkspacePath =
+        thread.worktreePath ?? projectCwdById.get(thread.projectId) ?? null;
+      const clicked = await api.contextMenu.show(
+        [
+          { id: "rename", label: "Rename thread" },
+          { id: "mark-unread", label: "Mark unread" },
+          { id: "copy-path", label: "Copy Path" },
+          { id: "copy-thread-id", label: "Copy Thread ID" },
+          { id: "delete", label: "Delete", destructive: true },
+        ],
+        position,
+      );
+
+      if (clicked === "rename") {
+        setRenamingThreadId(threadId);
+        setRenamingTitle(thread.title);
+        renamingCommittedRef.current = false;
+        return;
+      }
+
+      if (clicked === "mark-unread") {
+        markThreadUnread(threadId, thread.latestTurn?.completedAt);
+        return;
+      }
+      if (clicked === "copy-path") {
+        if (!threadWorkspacePath) {
+          toastManager.add({
+            type: "error",
+            title: "Path unavailable",
+            description: "This thread does not have a workspace path to copy.",
+          });
+          return;
+        }
+        copyPathToClipboard(threadWorkspacePath, { path: threadWorkspacePath });
+        return;
+      }
+      if (clicked === "copy-thread-id") {
+        copyThreadIdToClipboard(threadId, { threadId });
+        return;
+      }
+      if (clicked !== "delete") return;
+      if (appSettings.confirmThreadDelete) {
+        const confirmed = await api.dialogs.confirm(
+          [
+            `Delete thread "${thread.title}"?`,
+            "This permanently clears conversation history for this thread.",
+          ].join("\n"),
+        );
+        if (!confirmed) {
+          return;
+        }
+      }
+      await deleteThread(threadId);
+    },
+    [
+      appSettings.confirmThreadDelete,
+      copyPathToClipboard,
+      copyThreadIdToClipboard,
+      deleteThread,
+      markThreadUnread,
+      projectCwdById,
+      sidebarThreadsById,
+    ],
+  );
+
+  const handleMultiSelectContextMenu = useCallback(
+    async (position: { x: number; y: number }) => {
+      const api = readNativeApi();
+      if (!api) return;
+      const ids = [...selectedThreadIds];
+      if (ids.length === 0) return;
+      const count = ids.length;
+
+      const clicked = await api.contextMenu.show(
+        [
+          { id: "mark-unread", label: `Mark unread (${count})` },
+          { id: "delete", label: `Delete (${count})`, destructive: true },
+        ],
+        position,
+      );
+
+      if (clicked === "mark-unread") {
+        for (const id of ids) {
+          const thread = sidebarThreadsById[id];
+          markThreadUnread(id, thread?.latestTurn?.completedAt);
+        }
+        clearSelection();
+        return;
+      }
+
+      if (clicked !== "delete") return;
+
+      if (appSettings.confirmThreadDelete) {
+        const confirmed = await api.dialogs.confirm(
+          [
+            `Delete ${count} thread${count === 1 ? "" : "s"}?`,
+            "This permanently clears conversation history for these threads.",
+          ].join("\n"),
+        );
+        if (!confirmed) return;
+      }
+
+      const deletedIds = new Set<ThreadId>(ids);
+      for (const id of ids) {
+        await deleteThread(id, { deletedThreadIds: deletedIds });
+      }
+      removeFromSelection(ids);
+    },
+    [
+      appSettings.confirmThreadDelete,
+      clearSelection,
+      deleteThread,
+      markThreadUnread,
+      removeFromSelection,
+      selectedThreadIds,
+      sidebarThreadsById,
+    ],
+  );
+
+  return {
+    renamingThreadId,
+    renamingTitle,
+    setRenamingTitle,
+    renamingInputRef,
+    renamingCommittedRef,
+    cancelRename,
+    commitRename,
+    confirmingArchiveThreadId,
+    setConfirmingArchiveThreadId,
+    confirmArchiveButtonRefs,
+    attemptArchiveThread,
+    selectedThreadIds,
+    clearSelection,
+    handleThreadClick,
+    navigateToThread,
+    handleThreadContextMenu,
+    handleMultiSelectContextMenu,
+    openPrLink,
+  };
+}

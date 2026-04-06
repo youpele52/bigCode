@@ -9,8 +9,8 @@ import {
   queryOptions,
   type QueryClient,
 } from "@tanstack/react-query";
-import { ensureNativeApi } from "../nativeApi";
-import { getWsRpcClient } from "../wsRpcClient";
+import { ensureNativeApi } from "../rpc/nativeApi";
+import { getWsRpcClient } from "../rpc/wsRpcClient";
 
 const GIT_STATUS_STALE_TIME_MS = 5_000;
 const GIT_STATUS_REFETCH_INTERVAL_MS = 15_000;

@@ -26,18 +26,18 @@ import { HttpClient, HttpRouter, HttpServer } from "effect/unstable/http";
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
 import { vi } from "vitest";
 
-import type { ServerConfigShape } from "./config.ts";
-import { deriveServerPaths, ServerConfig } from "./config.ts";
+import type { ServerConfigShape } from "./startup/config.ts";
+import { deriveServerPaths, ServerConfig } from "./startup/config.ts";
 import { makeRoutesLayer } from "./server.ts";
-import { resolveAttachmentRelativePath } from "./attachmentPaths.ts";
+import { resolveAttachmentRelativePath } from "./attachments/attachmentPaths.ts";
 import {
   CheckpointDiffQuery,
   type CheckpointDiffQueryShape,
 } from "./checkpointing/Services/CheckpointDiffQuery.ts";
 import { GitCore, type GitCoreShape } from "./git/Services/GitCore.ts";
 import { GitManager, type GitManagerShape } from "./git/Services/GitManager.ts";
-import { Keybindings, type KeybindingsShape } from "./keybindings.ts";
-import { Open, type OpenShape } from "./open.ts";
+import { Keybindings, type KeybindingsShape } from "./keybindings/keybindings.ts";
+import { Open, type OpenShape } from "./utils/open.ts";
 import {
   OrchestrationEngineService,
   type OrchestrationEngineShape,
@@ -52,9 +52,15 @@ import {
   ProviderRegistry,
   type ProviderRegistryShape,
 } from "./provider/Services/ProviderRegistry.ts";
-import { ServerLifecycleEvents, type ServerLifecycleEventsShape } from "./serverLifecycleEvents.ts";
-import { ServerRuntimeStartup, type ServerRuntimeStartupShape } from "./serverRuntimeStartup.ts";
-import { ServerSettingsService, type ServerSettingsShape } from "./serverSettings.ts";
+import {
+  ServerLifecycleEvents,
+  type ServerLifecycleEventsShape,
+} from "./startup/serverLifecycleEvents.ts";
+import {
+  ServerRuntimeStartup,
+  type ServerRuntimeStartupShape,
+} from "./startup/serverRuntimeStartup.ts";
+import { ServerSettingsService, type ServerSettingsShape } from "./ws/serverSettings.ts";
 import { TerminalManager, type TerminalManagerShape } from "./terminal/Services/Manager.ts";
 import { ProjectFaviconResolverLive } from "./project/Layers/ProjectFaviconResolver.ts";
 import {

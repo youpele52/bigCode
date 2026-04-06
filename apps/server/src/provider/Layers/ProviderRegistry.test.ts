@@ -32,7 +32,7 @@ import {
 import { checkClaudeProviderStatus, parseClaudeAuthStatusFromOutput } from "./ClaudeProvider";
 import { haveProvidersChanged, ProviderRegistryLive } from "./ProviderRegistry";
 import { OpencodeServerManager } from "../Services/OpencodeServerManager";
-import { ServerSettingsService, type ServerSettingsShape } from "../../serverSettings";
+import { ServerSettingsService, type ServerSettingsShape } from "../../ws/serverSettings";
 import { ProviderRegistry } from "../Services/ProviderRegistry";
 
 // ── Test helpers ────────────────────────────────────────────────────

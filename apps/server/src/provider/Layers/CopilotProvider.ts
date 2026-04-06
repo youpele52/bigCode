@@ -9,7 +9,7 @@ import {
 } from "../providerSnapshot";
 import { makeManagedServerProvider } from "../makeManagedServerProvider";
 import { CopilotProvider } from "../Services/CopilotProvider";
-import { ServerSettingsService } from "../../serverSettings";
+import { ServerSettingsService } from "../../ws/serverSettings";
 import { ProviderAdapterProcessError } from "../Errors";
 import { makeNodeWrapperCliPath } from "./CopilotAdapter";
 

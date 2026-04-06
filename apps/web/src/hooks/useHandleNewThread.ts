@@ -2,16 +2,13 @@ import { DEFAULT_RUNTIME_MODE, type ProjectId, ThreadId } from "@t3tools/contrac
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
-import {
-  type DraftThreadEnvMode,
-  type DraftThreadState,
-  useComposerDraftStore,
-} from "../composerDraftStore";
+import { useComposerDraftStore } from "../stores/composer";
+import { type DraftThreadEnvMode, type DraftThreadState } from "../stores/composer";
 import { newThreadId } from "../lib/utils";
-import { orderItemsByPreferredIds } from "../components/Sidebar.logic";
-import { useStore } from "../store";
-import { useThreadById } from "../storeSelectors";
-import { useUiStateStore } from "../uiStateStore";
+import { orderItemsByPreferredIds } from "../components/sidebar/Sidebar.logic";
+import { useStore } from "../stores/main";
+import { useThreadById } from "../stores/main";
+import { useUiStateStore } from "../stores/ui";
 
 export function useHandleNewThread() {
   const projectIds = useStore(useShallow((store) => store.projects.map((project) => project.id)));

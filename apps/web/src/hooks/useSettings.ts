@@ -26,9 +26,9 @@ import {
   TimestampFormat,
   UnifiedSettings,
 } from "@t3tools/contracts/settings";
-import { ensureNativeApi } from "~/nativeApi";
+import { ensureNativeApi } from "../rpc/nativeApi";
 import { useLocalStorage } from "./useLocalStorage";
-import { normalizeCustomModelSlugs } from "~/modelSelection";
+import { normalizeCustomModelSlugs } from "../models/provider";
 import { Predicate, Schema, Struct } from "effect";
 import { DeepMutable } from "effect/Types";
 import { deepMerge } from "@t3tools/shared/Struct";

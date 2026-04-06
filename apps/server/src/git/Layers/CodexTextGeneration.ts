@@ -6,8 +6,8 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { CodexModelSelection } from "@t3tools/contracts";
 import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@t3tools/shared/git";
 
-import { resolveAttachmentPath } from "../../attachmentStore.ts";
-import { ServerConfig } from "../../config.ts";
+import { resolveAttachmentPath } from "../../attachments/attachmentStore.ts";
+import { ServerConfig } from "../../startup/config.ts";
 import { TextGenerationError } from "@t3tools/contracts";
 import {
   type BranchNameGenerationInput,
@@ -29,7 +29,7 @@ import {
   toJsonSchemaObject,
 } from "../Utils.ts";
 import { getCodexModelCapabilities } from "../../provider/Layers/CodexProvider.ts";
-import { ServerSettingsService } from "../../serverSettings.ts";
+import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { normalizeCodexModelOptionsWithCapabilities } from "@t3tools/shared/model";
 
 const CODEX_GIT_TEXT_GENERATION_REASONING_EFFORT = "low";

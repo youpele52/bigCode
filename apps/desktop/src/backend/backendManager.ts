@@ -1,0 +1,254 @@
+import * as ChildProcess from "node:child_process";
+import * as FS from "node:fs";
+
+import {
+  backendChildEnv,
+  captureBackendOutput,
+  writeBackendSessionBoundary,
+} from "../logging/logging";
+import { resolveBackendCwd, resolveBackendEntry } from "../env/pathResolver";
+import type { RotatingFileSink } from "@t3tools/shared/logging";
+import { readPersistedBackendObservabilitySettings } from "../logging/logging";
+
+// ---------------------------------------------------------------------------
+// Module-level state
+// ---------------------------------------------------------------------------
+
+export let backendProcess: ChildProcess.ChildProcess | null = null;
+export let backendPort = 0;
+export let backendAuthToken = "";
+export let backendWsUrl = "";
+export let restartAttempt = 0;
+export let restartTimer: ReturnType<typeof setTimeout> | null = null;
+
+const expectedBackendExitChildren = new WeakSet<ChildProcess.ChildProcess>();
+
+// ---------------------------------------------------------------------------
+// Dependencies (injected once via init)
+// ---------------------------------------------------------------------------
+
+interface BackendManagerDeps {
+  readonly rootDir: string;
+  readonly baseDir: string;
+  readonly serverSettingsPath: string;
+  readonly getIsQuitting: () => boolean;
+  readonly getBackendLogSink: () => RotatingFileSink | null;
+  readonly runId: string;
+}
+
+let _deps: BackendManagerDeps | null = null;
+
+export function initBackendManager(deps: BackendManagerDeps): void {
+  _deps = deps;
+  backendPort = 0;
+  backendAuthToken = "";
+  backendWsUrl = "";
+  restartAttempt = 0;
+  restartTimer = null;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function logBackendBoundary(phase: "START" | "END", details: string): void {
+  if (!_deps) return;
+  writeBackendSessionBoundary(phase, details, _deps.getBackendLogSink(), _deps.runId);
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/**
+ * Set the resolved port/auth/url (called from bootstrap after port reservation).
+ */
+export function setBackendConnectionInfo(opts: {
+  port: number;
+  authToken: string;
+  wsUrl: string;
+}): void {
+  backendPort = opts.port;
+  backendAuthToken = opts.authToken;
+  backendWsUrl = opts.wsUrl;
+}
+
+export function scheduleBackendRestart(reason: string): void {
+  if (!_deps) return;
+  if (_deps.getIsQuitting() || restartTimer) return;
+
+  const delayMs = Math.min(500 * 2 ** restartAttempt, 10_000);
+  restartAttempt += 1;
+  console.error(`[desktop] backend exited unexpectedly (${reason}); restarting in ${delayMs}ms`);
+
+  restartTimer = setTimeout(() => {
+    restartTimer = null;
+    startBackend();
+  }, delayMs);
+}
+
+export function startBackend(): void {
+  if (!_deps) return;
+  if (_deps.getIsQuitting() || backendProcess) return;
+
+  const backendObservabilitySettings = readPersistedBackendObservabilitySettings(
+    _deps.serverSettingsPath,
+  );
+  const backendEntry = resolveBackendEntry(_deps.rootDir);
+  if (!FS.existsSync(backendEntry)) {
+    scheduleBackendRestart(`missing server entry at ${backendEntry}`);
+    return;
+  }
+
+  const backendLogSink = _deps.getBackendLogSink();
+  const captureBackendLogs = backendLogSink !== null;
+  const child = ChildProcess.spawn(process.execPath, [backendEntry, "--bootstrap-fd", "3"], {
+    cwd: resolveBackendCwd(_deps.rootDir),
+    // In Electron main, process.execPath points to the Electron binary.
+    // Run the child in Node mode so this backend process does not become a GUI app instance.
+    env: {
+      ...backendChildEnv(),
+      ELECTRON_RUN_AS_NODE: "1",
+    },
+    stdio: captureBackendLogs
+      ? ["ignore", "pipe", "pipe", "pipe"]
+      : ["ignore", "inherit", "inherit", "pipe"],
+  });
+  const bootstrapStream = child.stdio[3];
+  if (bootstrapStream && "write" in bootstrapStream) {
+    bootstrapStream.write(
+      `${JSON.stringify({
+        mode: "desktop",
+        noBrowser: true,
+        port: backendPort,
+        t3Home: _deps.baseDir,
+        authToken: backendAuthToken,
+        ...(backendObservabilitySettings.otlpTracesUrl
+          ? { otlpTracesUrl: backendObservabilitySettings.otlpTracesUrl }
+          : {}),
+        ...(backendObservabilitySettings.otlpMetricsUrl
+          ? { otlpMetricsUrl: backendObservabilitySettings.otlpMetricsUrl }
+          : {}),
+      })}\n`,
+    );
+    bootstrapStream.end();
+  } else {
+    child.kill("SIGTERM");
+    scheduleBackendRestart("missing desktop bootstrap pipe");
+    return;
+  }
+  backendProcess = child;
+  let backendSessionClosed = false;
+  const closeBackendSession = (details: string) => {
+    if (backendSessionClosed) return;
+    backendSessionClosed = true;
+    logBackendBoundary("END", details);
+  };
+  logBackendBoundary(
+    "START",
+    `pid=${child.pid ?? "unknown"} port=${backendPort} cwd=${resolveBackendCwd(_deps.rootDir)}`,
+  );
+  captureBackendOutput(child, backendLogSink);
+
+  child.once("spawn", () => {
+    restartAttempt = 0;
+  });
+
+  child.on("error", (error) => {
+    const wasExpected = expectedBackendExitChildren.has(child);
+    if (backendProcess === child) {
+      backendProcess = null;
+    }
+    closeBackendSession(`pid=${child.pid ?? "unknown"} error=${error.message}`);
+    if (wasExpected) {
+      return;
+    }
+    scheduleBackendRestart(error.message);
+  });
+
+  child.on("exit", (code, signal) => {
+    const wasExpected = expectedBackendExitChildren.has(child);
+    if (backendProcess === child) {
+      backendProcess = null;
+    }
+    closeBackendSession(
+      `pid=${child.pid ?? "unknown"} code=${code ?? "null"} signal=${signal ?? "null"}`,
+    );
+    if (_deps?.getIsQuitting() || wasExpected) return;
+    const reason = `code=${code ?? "null"} signal=${signal ?? "null"}`;
+    scheduleBackendRestart(reason);
+  });
+}
+
+export function stopBackend(): void {
+  if (restartTimer) {
+    clearTimeout(restartTimer);
+    restartTimer = null;
+  }
+
+  const child = backendProcess;
+  backendProcess = null;
+  if (!child) return;
+
+  if (child.exitCode === null && child.signalCode === null) {
+    expectedBackendExitChildren.add(child);
+    child.kill("SIGTERM");
+    setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill("SIGKILL");
+      }
+    }, 2_000).unref();
+  }
+}
+
+export async function stopBackendAndWaitForExit(timeoutMs = 5_000): Promise<void> {
+  if (restartTimer) {
+    clearTimeout(restartTimer);
+    restartTimer = null;
+  }
+
+  const child = backendProcess;
+  backendProcess = null;
+  if (!child) return;
+  const backendChild = child;
+  if (backendChild.exitCode !== null || backendChild.signalCode !== null) return;
+  expectedBackendExitChildren.add(backendChild);
+
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    let forceKillTimer: ReturnType<typeof setTimeout> | null = null;
+    let exitTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function settle(): void {
+      if (settled) return;
+      settled = true;
+      backendChild.off("exit", onExit);
+      if (forceKillTimer) {
+        clearTimeout(forceKillTimer);
+      }
+      if (exitTimeoutTimer) {
+        clearTimeout(exitTimeoutTimer);
+      }
+      resolve();
+    }
+
+    function onExit(): void {
+      settle();
+    }
+
+    backendChild.once("exit", onExit);
+    backendChild.kill("SIGTERM");
+
+    forceKillTimer = setTimeout(() => {
+      if (backendChild.exitCode === null && backendChild.signalCode === null) {
+        backendChild.kill("SIGKILL");
+      }
+    }, 2_000);
+    forceKillTimer.unref();
+
+    exitTimeoutTimer = setTimeout(() => {
+      settle();
+    }, timeoutMs);
+    exitTimeoutTimer.unref();
+  });
+}

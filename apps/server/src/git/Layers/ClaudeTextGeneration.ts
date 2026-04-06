@@ -30,7 +30,7 @@ import {
   toJsonSchemaObject,
 } from "../Utils.ts";
 import { normalizeClaudeModelOptionsWithCapabilities } from "@t3tools/shared/model";
-import { ServerSettingsService } from "../../serverSettings.ts";
+import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { getClaudeModelCapabilities } from "../../provider/Layers/ClaudeProvider.ts";
 
 const CLAUDE_TIMEOUT_MS = 180_000;

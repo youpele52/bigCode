@@ -1,0 +1,394 @@
+import { useCallback, type PointerEvent, type MouseEvent, type KeyboardEvent } from "react";
+import { type DragCancelEvent, type DragStartEvent, type DragEndEvent } from "@dnd-kit/core";
+import { DEFAULT_MODEL_BY_PROVIDER, type ProjectId, type ThreadId } from "@t3tools/contracts";
+import { isNonEmpty as isNonEmptyString } from "effect/String";
+import { isMacPlatform, newCommandId, newProjectId } from "../../lib/utils";
+import { useUiStateStore } from "../../stores/ui";
+import { useComposerDraftStore } from "../../stores/composer";
+import { readNativeApi } from "../../rpc/nativeApi";
+import { toastManager } from "../ui/toast";
+import { useHandleNewThread } from "../../hooks/useHandleNewThread";
+import { useSettings } from "../../hooks/useSettings";
+import { isContextMenuPointerDown } from "./Sidebar.logic";
+import type { Project } from "../../models/types";
+import type { SidebarProjectSnapshot } from "./Sidebar.types";
+
+export interface SidebarProjectActionsInput {
+  /** Projects list from the main store. */
+  projects: Project[];
+  threadIdsByProjectId: Record<string, ThreadId[]>;
+  sidebarProjects: SidebarProjectSnapshot[];
+  appSettings: ReturnType<typeof useSettings>;
+  isAddingProject: boolean;
+  setIsAddingProject: (v: boolean) => void;
+  newCwd: string;
+  setNewCwd: (v: string) => void;
+  setAddProjectError: (v: string | null) => void;
+  setAddingProject: (updater: (prev: boolean) => boolean) => void;
+  isPickingFolder: boolean;
+  setIsPickingFolder: (v: boolean) => void;
+  addProjectInputRef: React.MutableRefObject<HTMLInputElement | null>;
+  shouldBrowseForProjectImmediately: boolean;
+  /** Shared drag refs — owned by the composition hook. */
+  dragInProgressRef: React.MutableRefObject<boolean>;
+  suppressProjectClickAfterDragRef: React.MutableRefObject<boolean>;
+  suppressProjectClickForContextMenuRef: React.MutableRefObject<boolean>;
+  selectedThreadIdsSize: number;
+  clearSelection: () => void;
+  copyPathToClipboard: (text: string, ctx: { path: string }) => void;
+  focusMostRecentThreadForProject: (projectId: ProjectId) => void;
+  handleNewThread: ReturnType<typeof useHandleNewThread>["handleNewThread"];
+}
+
+export interface SidebarProjectActionsOutput {
+  addProjectFromPath: (rawCwd: string) => Promise<void>;
+  handleAddProject: () => void;
+  handlePickFolder: () => Promise<void>;
+  handleStartAddProject: () => void;
+  cancelAddProject: () => void;
+  handleProjectContextMenu: (projectId: ProjectId, position: { x: number; y: number }) => void;
+  handleProjectDragStart: (event: DragStartEvent) => void;
+  handleProjectDragEnd: (event: DragEndEvent) => void;
+  handleProjectDragCancel: (event: DragCancelEvent) => void;
+  handleProjectTitlePointerDownCapture: (event: PointerEvent<HTMLButtonElement>) => void;
+  handleProjectTitleClick: (event: MouseEvent<HTMLButtonElement>, projectId: ProjectId) => void;
+  handleProjectTitleKeyDown: (
+    event: KeyboardEvent<HTMLButtonElement>,
+    projectId: ProjectId,
+  ) => void;
+}
+
+/** Encapsulates all project-level actions for the sidebar. */
+export function useSidebarProjectActions({
+  projects,
+  threadIdsByProjectId,
+  sidebarProjects,
+  appSettings,
+  isAddingProject,
+  setIsAddingProject,
+  newCwd,
+  setNewCwd,
+  setAddProjectError,
+  setAddingProject,
+  isPickingFolder,
+  setIsPickingFolder,
+  addProjectInputRef,
+  shouldBrowseForProjectImmediately,
+  dragInProgressRef,
+  suppressProjectClickAfterDragRef,
+  suppressProjectClickForContextMenuRef,
+  selectedThreadIdsSize,
+  clearSelection,
+  copyPathToClipboard,
+  focusMostRecentThreadForProject,
+  handleNewThread,
+}: SidebarProjectActionsInput): SidebarProjectActionsOutput {
+  const reorderProjects = useUiStateStore((store) => store.reorderProjects);
+  const toggleProject = useUiStateStore((store) => store.toggleProject);
+  const clearComposerDraftForThread = useComposerDraftStore((store) => store.clearDraftThread);
+  const getDraftThreadByProjectId = useComposerDraftStore(
+    (store) => store.getDraftThreadByProjectId,
+  );
+  const clearProjectDraftThreadId = useComposerDraftStore(
+    (store) => store.clearProjectDraftThreadId,
+  );
+
+  const addProjectFromPath = useCallback(
+    async (rawCwd: string) => {
+      const cwd = rawCwd.trim();
+      if (!cwd || isAddingProject) return;
+      const api = readNativeApi();
+      if (!api) return;
+
+      setIsAddingProject(true);
+      const finishAddingProject = () => {
+        setIsAddingProject(false);
+        setNewCwd("");
+        setAddProjectError(null);
+        setAddingProject(() => false);
+      };
+
+      const existing = projects.find((project) => project.cwd === cwd);
+      if (existing) {
+        focusMostRecentThreadForProject(existing.id);
+        finishAddingProject();
+        return;
+      }
+
+      const projectId = newProjectId();
+      const createdAt = new Date().toISOString();
+      const title = cwd.split(/[/\\]/).findLast(isNonEmptyString) ?? cwd;
+      try {
+        await api.orchestration.dispatchCommand({
+          type: "project.create",
+          commandId: newCommandId(),
+          projectId,
+          title,
+          workspaceRoot: cwd,
+          defaultModelSelection: {
+            provider: "codex",
+            model: DEFAULT_MODEL_BY_PROVIDER.codex,
+          },
+          createdAt,
+        });
+        await handleNewThread(projectId, {
+          envMode: appSettings.defaultThreadEnvMode,
+        }).catch(() => undefined);
+      } catch (error) {
+        const description =
+          error instanceof Error ? error.message : "An error occurred while adding the project.";
+        setIsAddingProject(false);
+        if (shouldBrowseForProjectImmediately) {
+          toastManager.add({
+            type: "error",
+            title: "Failed to add project",
+            description,
+          });
+        } else {
+          setAddProjectError(description);
+        }
+        return;
+      }
+      finishAddingProject();
+    },
+    [
+      focusMostRecentThreadForProject,
+      handleNewThread,
+      isAddingProject,
+      projects,
+      shouldBrowseForProjectImmediately,
+      appSettings.defaultThreadEnvMode,
+      setIsAddingProject,
+      setNewCwd,
+      setAddProjectError,
+      setAddingProject,
+    ],
+  );
+
+  const handleAddProject = () => {
+    void addProjectFromPath(newCwd);
+  };
+
+  const handlePickFolder = useCallback(async () => {
+    const api = readNativeApi();
+    if (!api || isPickingFolder) return;
+    setIsPickingFolder(true);
+    let pickedPath: string | null = null;
+    try {
+      pickedPath = await api.dialogs.pickFolder();
+    } catch {
+      // Ignore picker failures and leave the current thread selection unchanged.
+    }
+    if (pickedPath) {
+      await addProjectFromPath(pickedPath);
+    } else if (!shouldBrowseForProjectImmediately) {
+      addProjectInputRef.current?.focus();
+    }
+    setIsPickingFolder(false);
+  }, [
+    addProjectFromPath,
+    isPickingFolder,
+    shouldBrowseForProjectImmediately,
+    setIsPickingFolder,
+    addProjectInputRef,
+  ]);
+
+  const handleStartAddProject = useCallback(() => {
+    setAddProjectError(null);
+    if (shouldBrowseForProjectImmediately) {
+      void handlePickFolder();
+      return;
+    }
+    setAddingProject((prev) => !prev);
+  }, [handlePickFolder, setAddProjectError, setAddingProject, shouldBrowseForProjectImmediately]);
+
+  const cancelAddProject = useCallback(() => {
+    setAddingProject(() => false);
+    setAddProjectError(null);
+  }, [setAddingProject, setAddProjectError]);
+
+  const handleProjectContextMenuAsync = useCallback(
+    async (projectId: ProjectId, position: { x: number; y: number }) => {
+      const api = readNativeApi();
+      if (!api) return;
+      const project = projects.find((entry) => entry.id === projectId);
+      if (!project) return;
+
+      const clicked = await api.contextMenu.show(
+        [
+          { id: "copy-path", label: "Copy Project Path" },
+          { id: "delete", label: "Remove project", destructive: true },
+        ],
+        position,
+      );
+      if (clicked === "copy-path") {
+        copyPathToClipboard(project.cwd, { path: project.cwd });
+        return;
+      }
+      if (clicked !== "delete") return;
+
+      const projectThreadIds = threadIdsByProjectId[projectId] ?? [];
+      if (projectThreadIds.length > 0) {
+        toastManager.add({
+          type: "warning",
+          title: "Project is not empty",
+          description: "Delete all threads in this project before removing it.",
+        });
+        return;
+      }
+
+      const confirmed = await api.dialogs.confirm(`Remove project "${project.name}"?`);
+      if (!confirmed) return;
+
+      try {
+        const projectDraftThread = getDraftThreadByProjectId(projectId);
+        if (projectDraftThread) {
+          clearComposerDraftForThread(projectDraftThread.threadId);
+        }
+        clearProjectDraftThreadId(projectId);
+        await api.orchestration.dispatchCommand({
+          type: "project.delete",
+          commandId: newCommandId(),
+          projectId,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown error removing project.";
+        console.error("Failed to remove project", { projectId, error });
+        toastManager.add({
+          type: "error",
+          title: `Failed to remove "${project.name}"`,
+          description: message,
+        });
+      }
+    },
+    [
+      clearComposerDraftForThread,
+      clearProjectDraftThreadId,
+      copyPathToClipboard,
+      getDraftThreadByProjectId,
+      projects,
+      threadIdsByProjectId,
+    ],
+  );
+
+  const handleProjectContextMenu = useCallback(
+    (projectId: ProjectId, position: { x: number; y: number }) => {
+      suppressProjectClickForContextMenuRef.current = true;
+      void handleProjectContextMenuAsync(projectId, position);
+    },
+    [handleProjectContextMenuAsync, suppressProjectClickForContextMenuRef],
+  );
+
+  const handleProjectDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      if (appSettings.sidebarProjectSortOrder !== "manual") {
+        dragInProgressRef.current = false;
+        return;
+      }
+      dragInProgressRef.current = false;
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      const activeProject = sidebarProjects.find((project) => project.id === active.id);
+      const overProject = sidebarProjects.find((project) => project.id === over.id);
+      if (!activeProject || !overProject) return;
+      reorderProjects(activeProject.id, overProject.id);
+    },
+    [appSettings.sidebarProjectSortOrder, dragInProgressRef, reorderProjects, sidebarProjects],
+  );
+
+  const handleProjectDragStart = useCallback(
+    (_event: DragStartEvent) => {
+      if (appSettings.sidebarProjectSortOrder !== "manual") {
+        return;
+      }
+      dragInProgressRef.current = true;
+      suppressProjectClickAfterDragRef.current = true;
+    },
+    [appSettings.sidebarProjectSortOrder, dragInProgressRef, suppressProjectClickAfterDragRef],
+  );
+
+  const handleProjectDragCancel = useCallback(
+    (_event: DragCancelEvent) => {
+      dragInProgressRef.current = false;
+    },
+    [dragInProgressRef],
+  );
+
+  const handleProjectTitlePointerDownCapture = useCallback(
+    (event: PointerEvent<HTMLButtonElement>) => {
+      suppressProjectClickForContextMenuRef.current = false;
+      if (
+        isContextMenuPointerDown({
+          button: event.button,
+          ctrlKey: event.ctrlKey,
+          isMac: isMacPlatform(navigator.platform),
+        })
+      ) {
+        event.stopPropagation();
+      }
+      suppressProjectClickAfterDragRef.current = false;
+    },
+    [suppressProjectClickAfterDragRef, suppressProjectClickForContextMenuRef],
+  );
+
+  const handleProjectTitleClick = useCallback(
+    (event: MouseEvent<HTMLButtonElement>, projectId: ProjectId) => {
+      if (suppressProjectClickForContextMenuRef.current) {
+        suppressProjectClickForContextMenuRef.current = false;
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (dragInProgressRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (suppressProjectClickAfterDragRef.current) {
+        suppressProjectClickAfterDragRef.current = false;
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (selectedThreadIdsSize > 0) {
+        clearSelection();
+      }
+      toggleProject(projectId);
+    },
+    [
+      clearSelection,
+      dragInProgressRef,
+      selectedThreadIdsSize,
+      suppressProjectClickAfterDragRef,
+      suppressProjectClickForContextMenuRef,
+      toggleProject,
+    ],
+  );
+
+  const handleProjectTitleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLButtonElement>, projectId: ProjectId) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      if (dragInProgressRef.current) {
+        return;
+      }
+      toggleProject(projectId);
+    },
+    [dragInProgressRef, toggleProject],
+  );
+
+  return {
+    addProjectFromPath,
+    handleAddProject,
+    handlePickFolder,
+    handleStartAddProject,
+    cancelAddProject,
+    handleProjectContextMenu,
+    handleProjectDragStart,
+    handleProjectDragEnd,
+    handleProjectDragCancel,
+    handleProjectTitlePointerDownCapture,
+    handleProjectTitleClick,
+    handleProjectTitleKeyDown,
+  };
+}

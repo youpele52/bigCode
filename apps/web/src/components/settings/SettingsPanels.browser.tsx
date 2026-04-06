@@ -5,7 +5,7 @@ import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
-import { __resetNativeApiForTests } from "../../nativeApi";
+import { __resetNativeApiForTests } from "../../rpc/nativeApi";
 import { AppAtomRegistryProvider } from "../../rpc/atomRegistry";
 import { resetServerStateForTests, setServerConfigSnapshot } from "../../rpc/serverState";
 import { GeneralSettingsPanel } from "./SettingsPanels";

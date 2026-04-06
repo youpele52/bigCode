@@ -1,0 +1,24 @@
+import {
+  type ProjectEntry,
+  type ServerProvider,
+  type ThreadId,
+  OrchestrationThreadActivity,
+} from "@t3tools/contracts";
+
+import { type PendingUserInputDraftAnswer } from "../../../../logic/user-input";
+
+export const ATTACHMENT_PREVIEW_HANDOFF_TTL_MS = 5000;
+export const EMPTY_ACTIVITIES: OrchestrationThreadActivity[] = [];
+export const EMPTY_PROJECT_ENTRIES: ProjectEntry[] = [];
+export const EMPTY_PROVIDERS: ServerProvider[] = [];
+export const EMPTY_PENDING_USER_INPUT_ANSWERS: Record<string, PendingUserInputDraftAnswer> = {};
+
+export interface ChatViewProps {
+  threadId: ThreadId;
+}
+
+export interface TerminalLaunchContext {
+  threadId: ThreadId;
+  cwd: string;
+  worktreePath: string | null;
+}

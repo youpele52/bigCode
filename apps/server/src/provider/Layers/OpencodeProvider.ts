@@ -10,7 +10,7 @@ import {
 import { makeManagedServerProvider } from "../makeManagedServerProvider";
 import { OpencodeProvider } from "../Services/OpencodeProvider";
 import { OpencodeServerManager } from "../Services/OpencodeServerManager";
-import { ServerSettingsService } from "../../serverSettings";
+import { ServerSettingsService } from "../../ws/serverSettings";
 import { ProviderAdapterProcessError } from "../Errors";
 
 const PROVIDER = "opencode" as const;

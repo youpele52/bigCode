@@ -9,8 +9,8 @@ import { describe, expect, vi } from "vitest";
 import { GitCoreLive, makeGitCore } from "./GitCore.ts";
 import { GitCore, type GitCoreShape } from "../Services/GitCore.ts";
 import { GitCommandError } from "@t3tools/contracts";
-import { type ProcessRunResult, runProcess } from "../../processRunner.ts";
-import { ServerConfig } from "../../config.ts";
+import { type ProcessRunResult, runProcess } from "../../utils/processRunner.ts";
+import { ServerConfig } from "../../startup/config.ts";
 
 // ── Helpers ──
 

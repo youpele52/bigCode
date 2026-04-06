@@ -1,0 +1,438 @@
+/**
+ * OpencodeAdapter stream event mapping — maps OpenCode SSE events to
+ * canonical ProviderRuntimeEvents.
+ *
+ * @module OpencodeAdapter.stream.mapEvent
+ */
+import { randomUUID } from "node:crypto";
+
+import {
+  EventId,
+  TurnId,
+  type ProviderRuntimeEvent,
+  type ThreadTokenUsageSnapshot,
+  type UserInputQuestion,
+} from "@t3tools/contracts";
+import { type Event as OpencodeEvent } from "@opencode-ai/sdk";
+import { Effect } from "effect";
+
+import type { ActiveOpencodeSession } from "./OpencodeAdapter.types.ts";
+import {
+  eventBase,
+  normalizeString,
+  requestDetailFromPermission,
+  requestTypeFromPermission,
+} from "./OpencodeAdapter.stream.utils.ts";
+
+/**
+ * Map an OpenCode SSE event to zero or more ProviderRuntimeEvents.
+ */
+export function makeMapEvent(
+  nextEventId: Effect.Effect<EventId>,
+  makeEventStamp: () => Effect.Effect<{ eventId: EventId; createdAt: string }>,
+) {
+  return (
+    session: ActiveOpencodeSession,
+    event: OpencodeEvent,
+  ): Effect.Effect<ReadonlyArray<ProviderRuntimeEvent>> =>
+    Effect.gen(function* () {
+      const turnId = session.activeTurnId;
+      const stamp = yield* makeEventStamp();
+      const createdAt = stamp.createdAt;
+      const eventType = (event as { type: string }).type;
+      const raw = {
+        source: "opencode.sdk.session-event" as const,
+        method: eventType,
+        payload: event,
+      };
+
+      if (eventType === "message.part.delta") {
+        const partDelta = event as OpencodeEvent & {
+          properties: {
+            partID?: string;
+            field?: string;
+            delta?: string;
+          };
+        };
+        const delta = partDelta.properties.delta;
+        const itemId = partDelta.properties.partID;
+
+        if (!delta || !itemId) {
+          return [];
+        }
+
+        const streamKind =
+          partDelta.properties.field === "text"
+            ? "assistant_text"
+            : partDelta.properties.field === "reasoning"
+              ? "reasoning_text"
+              : undefined;
+
+        if (!streamKind) {
+          return [];
+        }
+
+        return [
+          {
+            ...eventBase({
+              eventId: stamp.eventId,
+              createdAt,
+              threadId: session.threadId,
+              ...(turnId ? { turnId } : {}),
+              itemId,
+              raw,
+            }),
+            type: "content.delta",
+            payload: {
+              streamKind,
+              delta,
+            },
+          },
+        ];
+      }
+
+      switch (eventType) {
+        case "message.part.updated": {
+          const part = (event.properties as { part: { id: string; type: string } }).part;
+          if (part.type === "tool") {
+            const toolPart = part as unknown as {
+              id: string;
+              type: "tool";
+              tool: string;
+              state: {
+                status?: string;
+                input?: unknown;
+                output?: string;
+                error?: string;
+                metadata?: Record<string, unknown>;
+                title?: string;
+              };
+              metadata?: Record<string, unknown>;
+            };
+
+            const toolState = toolPart.state?.status;
+            const toolInput = toolPart.state?.input;
+            const toolOutput = normalizeString(toolPart.state?.output);
+            const toolError = normalizeString(toolPart.state?.error);
+            const toolTitle =
+              normalizeString(toolPart.state?.title) ??
+              normalizeString(toolPart.metadata?.title) ??
+              toolPart.tool;
+
+            if (toolState === "pending" || toolState === "running") {
+              return [
+                {
+                  ...eventBase({
+                    eventId: stamp.eventId,
+                    createdAt,
+                    threadId: session.threadId,
+                    ...(turnId ? { turnId } : {}),
+                    itemId: toolPart.id,
+                    raw,
+                  }),
+                  type: "item.started",
+                  payload: {
+                    itemType: "dynamic_tool_call",
+                    status: "inProgress",
+                    title: toolTitle,
+                    ...(toolInput ? { data: toolInput } : {}),
+                  },
+                },
+              ];
+            }
+
+            if (toolState === "completed" || toolState === "error") {
+              return [
+                {
+                  ...eventBase({
+                    eventId: stamp.eventId,
+                    createdAt,
+                    threadId: session.threadId,
+                    ...(turnId ? { turnId } : {}),
+                    itemId: toolPart.id,
+                    raw,
+                  }),
+                  type: "item.completed",
+                  payload: {
+                    itemType: "dynamic_tool_call",
+                    status: toolState === "completed" ? "completed" : "failed",
+                    title: toolTitle,
+                    ...(toolOutput ? { detail: toolOutput } : {}),
+                    ...(toolError ? { detail: toolError } : {}),
+                    data: toolPart,
+                  },
+                },
+              ];
+            }
+
+            return [];
+          }
+
+          return [];
+        }
+        case "message.updated": {
+          const msg = (event.properties as { info: { role: string } }).info;
+          if (msg.role !== "assistant") return [];
+
+          const assistantMsg = msg as {
+            id: string;
+            role: "assistant";
+            modelID?: string;
+            providerID?: string;
+            tokens?: {
+              input: number;
+              output: number;
+              reasoning: number;
+              cache: { read: number; write: number };
+            };
+            cost?: number;
+            time?: { completed?: number };
+          };
+
+          // Track model info
+          if (assistantMsg.modelID) {
+            session.model = assistantMsg.modelID;
+          }
+          if (assistantMsg.providerID) {
+            session.providerID = assistantMsg.providerID;
+          }
+
+          // Emit token usage if available
+          if (assistantMsg.tokens) {
+            const tokens = assistantMsg.tokens;
+            const inputTokens = tokens.input ?? 0;
+            const outputTokens = tokens.output ?? 0;
+            const cachedInputTokens = tokens.cache?.read ?? 0;
+            const usedTokens = inputTokens + outputTokens + cachedInputTokens;
+
+            if (usedTokens > 0) {
+              const usage: ThreadTokenUsageSnapshot = {
+                usedTokens,
+                totalProcessedTokens: usedTokens,
+                ...(inputTokens > 0 ? { inputTokens, lastInputTokens: inputTokens } : {}),
+                ...(cachedInputTokens > 0
+                  ? { cachedInputTokens, lastCachedInputTokens: cachedInputTokens }
+                  : {}),
+                ...(outputTokens > 0 ? { outputTokens, lastOutputTokens: outputTokens } : {}),
+                ...(usedTokens > 0 ? { lastUsedTokens: usedTokens } : {}),
+              };
+              session.lastUsage = usage;
+
+              return [
+                {
+                  ...eventBase({
+                    eventId: stamp.eventId,
+                    createdAt,
+                    threadId: session.threadId,
+                    ...(turnId ? { turnId } : {}),
+                    itemId: assistantMsg.id,
+                    raw,
+                  }),
+                  type: "thread.token-usage.updated",
+                  payload: { usage },
+                },
+              ];
+            }
+          }
+
+          // If the message is complete (has completion time), emit item.completed
+          if (assistantMsg.time?.completed) {
+            return [
+              {
+                ...eventBase({
+                  eventId: stamp.eventId,
+                  createdAt,
+                  threadId: session.threadId,
+                  ...(turnId ? { turnId } : {}),
+                  itemId: assistantMsg.id,
+                  raw,
+                }),
+                type: "item.completed",
+                payload: {
+                  itemType: "assistant_message",
+                  status: "completed",
+                  title: "Assistant message",
+                  data: assistantMsg,
+                },
+              },
+            ];
+          }
+
+          return [];
+        }
+
+        case "session.status": {
+          const status = (event.properties as { status: { type: string } }).status;
+
+          if (status.type === "busy") {
+            const existingTurnId = session.activeTurnId;
+            if (existingTurnId) {
+              session.turns.at(-1)?.items.push(event);
+              return [];
+            }
+
+            const newTurnId = TurnId.makeUnsafe(`opencode-turn-${randomUUID()}`);
+            session.activeTurnId = newTurnId;
+            session.turns.push({ id: newTurnId, items: [event] });
+
+            return [
+              {
+                ...eventBase({
+                  eventId: stamp.eventId,
+                  createdAt,
+                  threadId: session.threadId,
+                  turnId: newTurnId,
+                  raw,
+                }),
+                type: "turn.started",
+                payload: session.model ? { model: session.model } : {},
+              },
+            ];
+          }
+
+          if (status.type === "idle") {
+            const completedTurnId = turnId;
+            session.activeTurnId = undefined;
+            session.turns.at(-1)?.items.push(event);
+
+            const readyEventId = yield* nextEventId;
+            return [
+              {
+                ...eventBase({
+                  eventId: stamp.eventId,
+                  createdAt,
+                  threadId: session.threadId,
+                  ...(completedTurnId ? { turnId: completedTurnId } : {}),
+                  raw,
+                }),
+                type: "turn.completed",
+                payload: {
+                  state: "completed",
+                  ...(session.lastUsage ? { usage: session.lastUsage } : {}),
+                },
+              },
+              {
+                ...eventBase({
+                  eventId: readyEventId,
+                  createdAt,
+                  threadId: session.threadId,
+                  raw,
+                }),
+                type: "session.state.changed",
+                payload: { state: "ready", reason: "session.idle" },
+              },
+            ];
+          }
+
+          return [];
+        }
+
+        case "permission.updated": {
+          const permission = event.properties as {
+            id: string;
+            sessionID: string;
+            metadata?: Record<string, unknown>;
+          };
+
+          if (!session.pendingPermissions.has(permission.id)) {
+            const reqType = requestTypeFromPermission(permission);
+            session.pendingPermissions.set(permission.id, {
+              requestType: reqType,
+              turnId,
+              permissionId: permission.id,
+            });
+
+            return [
+              {
+                ...eventBase({
+                  eventId: stamp.eventId,
+                  createdAt,
+                  threadId: session.threadId,
+                  ...(turnId ? { turnId } : {}),
+                  requestId: permission.id,
+                  raw,
+                }),
+                type: "request.opened",
+                payload: {
+                  requestType: reqType,
+                  ...(requestDetailFromPermission(permission)
+                    ? { detail: requestDetailFromPermission(permission) }
+                    : {}),
+                  args: permission,
+                },
+              },
+            ];
+          }
+          return [];
+        }
+
+        case "session.error": {
+          const errProps = event.properties as {
+            sessionID?: string;
+            error?: { type?: string; message?: string };
+          };
+          const errorMessage =
+            errProps.error?.message ?? errProps.error?.type ?? "Unknown OpenCode error";
+          session.lastError = errorMessage;
+
+          return [
+            {
+              ...eventBase({
+                eventId: stamp.eventId,
+                createdAt,
+                threadId: session.threadId,
+                ...(turnId ? { turnId } : {}),
+                raw,
+              }),
+              type: "runtime.error",
+              payload: {
+                message: errorMessage,
+                class: "provider_error",
+                detail: errProps.error,
+              },
+            },
+          ];
+        }
+
+        case "tui.prompt.append": {
+          const tuiProps = event.properties as { text?: string };
+          const questionText = normalizeString(tuiProps.text);
+
+          if (!questionText) {
+            return [];
+          }
+
+          const requestId = randomUUID();
+          session.pendingUserInputs.set(requestId, {
+            turnId,
+            questionText,
+          });
+
+          const question: UserInputQuestion = {
+            id: requestId,
+            header: "OpenCode",
+            question: questionText,
+            options: [],
+          };
+
+          return [
+            {
+              ...eventBase({
+                eventId: stamp.eventId,
+                createdAt,
+                threadId: session.threadId,
+                ...(turnId ? { turnId } : {}),
+                requestId,
+                raw,
+              }),
+              type: "user-input.requested",
+              payload: { questions: [question] },
+            },
+          ];
+        }
+
+        default:
+          return [];
+      }
+    });
+}

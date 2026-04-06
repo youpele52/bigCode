@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { isElectron } from "../env";
+import { isElectron } from "../config/env";
 import { SidebarTrigger } from "../components/ui/sidebar";
 
 function ChatIndexRouteView() {

@@ -1,10 +1,11 @@
+import { ThreadId } from "@t3tools/contracts";
 import { useEffect, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { toastManager } from "../components/ui/toast";
 import { useSettings } from "../hooks/useSettings";
-import { useStore } from "../store";
-import type { Thread } from "../types";
+import { useStore } from "../stores/main";
+import type { Thread } from "../models/types";
 import {
   buildTaskCompletionCopy,
   collectCompletedThreadCandidates,
@@ -70,6 +71,10 @@ export function showCompletionToast(
     type: "success",
     title,
     description: body,
+    data: {
+      threadId: ThreadId.makeUnsafe(candidate.threadId),
+      hideOnActiveThread: true,
+    },
     actionProps: {
       children: "View",
       onClick: () => {
@@ -118,18 +123,17 @@ export function TaskCompletionNotifications() {
     const currentSettings = settingsRef.current;
     const currentNavigate = navigateRef.current;
 
-    // Only notify when the user is not actively viewing the app.
+    // In-app toasts fire regardless of whether the tab is visible.
+    // System notifications only fire when the user is not actively viewing the app.
     const appIsHidden = document.hidden;
 
     for (const candidate of candidates) {
-      if (appIsHidden) {
-        if (currentSettings.enableTaskCompletionToasts) {
-          showCompletionToast(candidate, currentNavigate);
-        }
+      if (currentSettings.enableTaskCompletionToasts) {
+        showCompletionToast(candidate, currentNavigate);
+      }
 
-        if (currentSettings.enableSystemTaskCompletionNotifications) {
-          void showSystemTaskCompletionNotification(candidate);
-        }
+      if (appIsHidden && currentSettings.enableSystemTaskCompletionNotifications) {
+        void showSystemTaskCompletionNotification(candidate);
       }
     }
   }, [threads]);

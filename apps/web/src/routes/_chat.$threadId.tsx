@@ -2,26 +2,22 @@ import { ThreadId } from "@t3tools/contracts";
 import { createFileRoute, retainSearchParams, useNavigate } from "@tanstack/react-router";
 import { Suspense, lazy, type ReactNode, useCallback, useEffect, useState } from "react";
 
-import ChatView from "../components/ChatView";
-import { DiffWorkerPoolProvider } from "../components/DiffWorkerPoolProvider";
+import ChatView from "../components/chat/view/ChatView";
+import { DiffWorkerPoolProvider } from "../components/diff/DiffWorkerPoolProvider";
 import {
   DiffPanelHeaderSkeleton,
   DiffPanelLoadingState,
   DiffPanelShell,
   type DiffPanelMode,
-} from "../components/DiffPanelShell";
-import { useComposerDraftStore } from "../composerDraftStore";
-import {
-  type DiffRouteSearch,
-  parseDiffRouteSearch,
-  stripDiffSearchParams,
-} from "../diffRouteSearch";
+} from "../components/diff/DiffPanelShell";
+import { useComposerDraftStore } from "../stores/composer";
+import { type DiffRouteSearch, parseDiffRouteSearch, stripDiffSearchParams } from "../utils/diff";
 import { useMediaQuery } from "../hooks/useMediaQuery";
-import { useStore } from "../store";
+import { useStore } from "../stores/main";
 import { Sheet, SheetPopup } from "../components/ui/sheet";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "~/components/ui/sidebar";
 
-const DiffPanel = lazy(() => import("../components/DiffPanel"));
+const DiffPanel = lazy(() => import("../components/diff/DiffPanel"));
 const DIFF_INLINE_LAYOUT_MEDIA_QUERY = "(max-width: 1180px)";
 const DIFF_INLINE_SIDEBAR_WIDTH_STORAGE_KEY = "chat_diff_sidebar_width";
 const DIFF_INLINE_DEFAULT_WIDTH = "clamp(28rem,48vw,44rem)";

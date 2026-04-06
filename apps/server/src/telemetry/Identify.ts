@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Path, Random, Schema } from "effect";
 import * as Crypto from "node:crypto";
 import { homedir } from "node:os";
-import { ServerConfig } from "../config";
+import { ServerConfig } from "../startup/config";
 
 const CodexAuthJsonSchema = Schema.Struct({
   tokens: Schema.Struct({

@@ -6,9 +6,9 @@ import {
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
 } from "@t3tools/contracts";
 
-import { createAttachmentId, resolveAttachmentPath } from "../attachmentStore";
-import { ServerConfig } from "../config";
-import { parseBase64DataUrl } from "../imageMime";
+import { createAttachmentId, resolveAttachmentPath } from "../attachments/attachmentStore";
+import { ServerConfig } from "../startup/config";
+import { parseBase64DataUrl } from "../attachments/imageMime";
 import { WorkspacePaths } from "../workspace/Services/WorkspacePaths";
 
 export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>

@@ -1,5 +1,5 @@
 import { deriveDisplayedUserMessageState } from "../lib/terminalContext";
-import { buildInlineTerminalContextText } from "./chat/userMessageTerminalContexts";
+import { buildInlineTerminalContextText } from "./chat/common/userMessageTerminalContexts";
 
 const ASSISTANT_CHARS_PER_LINE_FALLBACK = 72;
 const USER_CHARS_PER_LINE_FALLBACK = 56;

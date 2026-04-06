@@ -1,6 +1,6 @@
 import type { ProjectSearchEntriesResult } from "@t3tools/contracts";
 import { queryOptions } from "@tanstack/react-query";
-import { ensureNativeApi } from "~/nativeApi";
+import { ensureNativeApi } from "../rpc/nativeApi";
 
 export const projectQueryKeys = {
   all: ["projects"] as const,

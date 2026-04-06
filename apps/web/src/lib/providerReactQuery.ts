@@ -5,7 +5,7 @@ import {
 } from "@t3tools/contracts";
 import { queryOptions } from "@tanstack/react-query";
 import { Option, Schema } from "effect";
-import { ensureNativeApi } from "../nativeApi";
+import { ensureNativeApi } from "../rpc/nativeApi";
 
 interface CheckpointDiffQueryInput {
   threadId: ThreadId | null;

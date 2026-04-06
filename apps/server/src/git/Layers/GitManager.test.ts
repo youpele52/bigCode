@@ -24,8 +24,8 @@ import { type TextGenerationShape, TextGeneration } from "../Services/TextGenera
 import { GitCoreLive } from "./GitCore.ts";
 import { GitCore } from "../Services/GitCore.ts";
 import { makeGitManager } from "./GitManager.ts";
-import { ServerConfig } from "../../config.ts";
-import { ServerSettingsService } from "../../serverSettings.ts";
+import { ServerConfig } from "../../startup/config.ts";
+import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import {
   ProjectSetupScriptRunner,
   type ProjectSetupScriptRunnerInput,

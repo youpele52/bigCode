@@ -1,12 +1,4 @@
-import * as OS from "node:os";
-import type {
-  ModelCapabilities,
-  CodexSettings,
-  ServerProvider,
-  ServerProviderModel,
-  ServerProviderAuth,
-  ServerProviderState,
-} from "@t3tools/contracts";
+import type { CodexSettings } from "@t3tools/contracts";
 import {
   Cache,
   Duration,
@@ -25,12 +17,10 @@ import {
   buildServerProvider,
   DEFAULT_TIMEOUT_MS,
   detailFromResult,
-  extractAuthBoolean,
   isCommandMissingCause,
   parseGenericCliVersion,
   providerModelsFromSettings,
   spawnAndCollect,
-  type CommandResult,
 } from "../providerSnapshot";
 import { makeManagedServerProvider } from "../makeManagedServerProvider";
 import {
@@ -46,250 +36,19 @@ import {
 } from "../codexAccount";
 import { probeCodexAccount } from "../codexAppServer";
 import { CodexProvider } from "../Services/CodexProvider";
-import { ServerSettingsService } from "../../serverSettings";
+import { ServerSettingsService } from "../../ws/serverSettings";
 import { ServerSettingsError } from "@t3tools/contracts";
+import { BUILT_IN_MODELS } from "./CodexProvider.models";
+import { hasCustomModelProvider, parseAuthStatusFromOutput } from "./CodexProvider.auth";
+
+export { getCodexModelCapabilities } from "./CodexProvider.models";
+export {
+  parseAuthStatusFromOutput,
+  readCodexConfigModelProvider,
+  hasCustomModelProvider,
+} from "./CodexProvider.auth";
 
 const PROVIDER = "codex" as const;
-const OPENAI_AUTH_PROVIDERS = new Set(["openai"]);
-const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
-  {
-    slug: "gpt-5.4",
-    name: "GPT-5.4",
-    isCustom: false,
-    capabilities: {
-      reasoningEffortLevels: [
-        { value: "xhigh", label: "Extra High" },
-        { value: "high", label: "High", isDefault: true },
-        { value: "medium", label: "Medium" },
-        { value: "low", label: "Low" },
-      ],
-      supportsFastMode: true,
-      supportsThinkingToggle: false,
-      contextWindowOptions: [],
-      promptInjectedEffortLevels: [],
-    },
-  },
-  {
-    slug: "gpt-5.4-mini",
-    name: "GPT-5.4 Mini",
-    isCustom: false,
-    capabilities: {
-      reasoningEffortLevels: [
-        { value: "xhigh", label: "Extra High" },
-        { value: "high", label: "High", isDefault: true },
-        { value: "medium", label: "Medium" },
-        { value: "low", label: "Low" },
-      ],
-      supportsFastMode: true,
-      supportsThinkingToggle: false,
-      contextWindowOptions: [],
-      promptInjectedEffortLevels: [],
-    },
-  },
-  {
-    slug: "gpt-5.3-codex",
-    name: "GPT-5.3 Codex",
-    isCustom: false,
-    capabilities: {
-      reasoningEffortLevels: [
-        { value: "xhigh", label: "Extra High" },
-        { value: "high", label: "High", isDefault: true },
-        { value: "medium", label: "Medium" },
-        { value: "low", label: "Low" },
-      ],
-      supportsFastMode: true,
-      supportsThinkingToggle: false,
-      contextWindowOptions: [],
-      promptInjectedEffortLevels: [],
-    },
-  },
-  {
-    slug: "gpt-5.3-codex-spark",
-    name: "GPT-5.3 Codex Spark",
-    isCustom: false,
-    capabilities: {
-      reasoningEffortLevels: [
-        { value: "xhigh", label: "Extra High" },
-        { value: "high", label: "High", isDefault: true },
-        { value: "medium", label: "Medium" },
-        { value: "low", label: "Low" },
-      ],
-      supportsFastMode: true,
-      supportsThinkingToggle: false,
-      contextWindowOptions: [],
-      promptInjectedEffortLevels: [],
-    },
-  },
-  {
-    slug: "gpt-5.2-codex",
-    name: "GPT-5.2 Codex",
-    isCustom: false,
-    capabilities: {
-      reasoningEffortLevels: [
-        { value: "xhigh", label: "Extra High" },
-        { value: "high", label: "High", isDefault: true },
-        { value: "medium", label: "Medium" },
-        { value: "low", label: "Low" },
-      ],
-      supportsFastMode: true,
-      supportsThinkingToggle: false,
-      contextWindowOptions: [],
-      promptInjectedEffortLevels: [],
-    },
-  },
-  {
-    slug: "gpt-5.2",
-    name: "GPT-5.2",
-    isCustom: false,
-    capabilities: {
-      reasoningEffortLevels: [
-        { value: "xhigh", label: "Extra High" },
-        { value: "high", label: "High", isDefault: true },
-        { value: "medium", label: "Medium" },
-        { value: "low", label: "Low" },
-      ],
-      supportsFastMode: true,
-      supportsThinkingToggle: false,
-      contextWindowOptions: [],
-      promptInjectedEffortLevels: [],
-    },
-  },
-];
-
-export function getCodexModelCapabilities(model: string | null | undefined): ModelCapabilities {
-  const slug = model?.trim();
-  return (
-    BUILT_IN_MODELS.find((candidate) => candidate.slug === slug)?.capabilities ?? {
-      reasoningEffortLevels: [],
-      supportsFastMode: false,
-      supportsThinkingToggle: false,
-      contextWindowOptions: [],
-      promptInjectedEffortLevels: [],
-    }
-  );
-}
-
-export function parseAuthStatusFromOutput(result: CommandResult): {
-  readonly status: Exclude<ServerProviderState, "disabled">;
-  readonly auth: Pick<ServerProviderAuth, "status">;
-  readonly message?: string;
-} {
-  const lowerOutput = `${result.stdout}\n${result.stderr}`.toLowerCase();
-
-  if (
-    lowerOutput.includes("unknown command") ||
-    lowerOutput.includes("unrecognized command") ||
-    lowerOutput.includes("unexpected argument")
-  ) {
-    return {
-      status: "warning",
-      auth: { status: "unknown" },
-      message: "Codex CLI authentication status command is unavailable in this Codex version.",
-    };
-  }
-
-  if (
-    lowerOutput.includes("not logged in") ||
-    lowerOutput.includes("login required") ||
-    lowerOutput.includes("authentication required") ||
-    lowerOutput.includes("run `codex login`") ||
-    lowerOutput.includes("run codex login")
-  ) {
-    return {
-      status: "error",
-      auth: { status: "unauthenticated" },
-      message: "Codex CLI is not authenticated. Run `codex login` and try again.",
-    };
-  }
-
-  const parsedAuth = (() => {
-    const trimmed = result.stdout.trim();
-    if (!trimmed || (!trimmed.startsWith("{") && !trimmed.startsWith("["))) {
-      return { attemptedJsonParse: false as const, auth: undefined as boolean | undefined };
-    }
-    try {
-      return {
-        attemptedJsonParse: true as const,
-        auth: extractAuthBoolean(JSON.parse(trimmed)),
-      };
-    } catch {
-      return { attemptedJsonParse: false as const, auth: undefined as boolean | undefined };
-    }
-  })();
-
-  if (parsedAuth.auth === true) {
-    return { status: "ready", auth: { status: "authenticated" } };
-  }
-  if (parsedAuth.auth === false) {
-    return {
-      status: "error",
-      auth: { status: "unauthenticated" },
-      message: "Codex CLI is not authenticated. Run `codex login` and try again.",
-    };
-  }
-  if (parsedAuth.attemptedJsonParse) {
-    return {
-      status: "warning",
-      auth: { status: "unknown" },
-      message:
-        "Could not verify Codex authentication status from JSON output (missing auth marker).",
-    };
-  }
-  if (result.code === 0) {
-    return { status: "ready", auth: { status: "authenticated" } };
-  }
-
-  const detail = detailFromResult(result);
-  return {
-    status: "warning",
-    auth: { status: "unknown" },
-    message: detail
-      ? `Could not verify Codex authentication status. ${detail}`
-      : "Could not verify Codex authentication status.",
-  };
-}
-
-export const readCodexConfigModelProvider = Effect.fn("readCodexConfigModelProvider")(function* () {
-  const fileSystem = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const settingsService = yield* ServerSettingsService;
-  const codexHome = yield* settingsService.getSettings.pipe(
-    Effect.map(
-      (settings) =>
-        settings.providers.codex.homePath ||
-        process.env.CODEX_HOME ||
-        path.join(OS.homedir(), ".codex"),
-    ),
-  );
-  const configPath = path.join(codexHome, "config.toml");
-
-  const content = yield* fileSystem
-    .readFileString(configPath)
-    .pipe(Effect.orElseSucceed(() => undefined));
-  if (content === undefined) {
-    return undefined;
-  }
-
-  let inTopLevel = true;
-  for (const line of content.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    if (trimmed.startsWith("[")) {
-      inTopLevel = false;
-      continue;
-    }
-    if (!inTopLevel) continue;
-
-    const match = trimmed.match(/^model_provider\s*=\s*["']([^"']+)["']/);
-    if (match) return match[1];
-  }
-  return undefined;
-});
-
-export const hasCustomModelProvider = readCodexConfigModelProvider().pipe(
-  Effect.map((provider) => provider !== undefined && !OPENAI_AUTH_PROVIDERS.has(provider)),
-  Effect.orElseSucceed(() => false),
-);
 
 const CAPABILITIES_PROBE_TIMEOUT_MS = 8_000;
 
@@ -327,7 +86,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
     readonly homePath?: string;
   }) => Effect.Effect<CodexAccountSnapshot | undefined>,
 ): Effect.fn.Return<
-  ServerProvider,
+  import("@t3tools/contracts").ServerProvider,
   ServerSettingsError,
   | ChildProcessSpawner.ChildProcessSpawner
   | FileSystem.FileSystem

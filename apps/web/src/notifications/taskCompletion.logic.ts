@@ -1,4 +1,4 @@
-import type { Thread } from "../types";
+import type { Thread } from "../models/types";
 
 export interface CompletedThreadCandidate {
   threadId: string;

@@ -6,7 +6,7 @@ vi.mock("../../processRunner", () => ({
   runProcess: vi.fn(),
 }));
 
-import { runProcess } from "../../processRunner";
+import { runProcess } from "../../utils/processRunner";
 import { GitHubCli } from "../Services/GitHubCli.ts";
 import { GitHubCliLive } from "./GitHubCli.ts";
 

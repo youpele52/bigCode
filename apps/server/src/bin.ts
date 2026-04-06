@@ -5,7 +5,7 @@ import * as Layer from "effect/Layer";
 import { Command } from "effect/unstable/cli";
 
 import { NetService } from "@t3tools/shared/Net";
-import { cli } from "./cli";
+import { cli } from "./cli/cli";
 import { version } from "../package.json" with { type: "json" };
 
 const CliRuntimeLayer = Layer.mergeAll(NodeServices.layer, NetService.layer);

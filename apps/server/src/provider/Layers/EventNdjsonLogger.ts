@@ -12,7 +12,7 @@ import type { ThreadId } from "@t3tools/contracts";
 import { RotatingFileSink } from "@t3tools/shared/logging";
 import { Effect, Exit, Logger, Scope } from "effect";
 
-import { toSafeThreadAttachmentSegment } from "../../attachmentStore.ts";
+import { toSafeThreadAttachmentSegment } from "../../attachments/attachmentStore.ts";
 
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024;
 const DEFAULT_MAX_FILES = 10;
