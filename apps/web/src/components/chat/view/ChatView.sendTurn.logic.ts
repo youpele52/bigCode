@@ -396,6 +396,12 @@ export function useOnSend(input: UseOnSendInput) {
         threadIdForSend,
         err instanceof Error ? err.message : "Failed to send message.",
       );
+      // Clear bootstrapSourceThreadId on failure too — a failed dispatch
+      // should not re-attempt bootstrap on the next retry because the context
+      // has already been consumed (the server may have processed part of it).
+      if (bootstrapSourceThreadId) {
+        inputRef.current.clearBootstrapSourceThreadId(threadIdForSend);
+      }
     });
     inFlightRef.current = false;
     if (!turnStartSucceeded) {

@@ -19,6 +19,9 @@ import {
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import { nowIso, withEventBase } from "./deciderHelpers.ts";
 
+/** Maximum number of seed messages accepted on `thread.create` to prevent write amplification. */
+const MAX_SEED_MESSAGES = 200;
+
 export type ThreadLifecycleCommand = Extract<
   OrchestrationCommand,
   {
@@ -92,6 +95,12 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
       };
       if (!command.seedMessages || command.seedMessages.length === 0) {
         return createdEvent;
+      }
+      if (command.seedMessages.length > MAX_SEED_MESSAGES) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `seedMessages length ${command.seedMessages.length} exceeds the maximum of ${MAX_SEED_MESSAGES}.`,
+        });
       }
       return [
         createdEvent,

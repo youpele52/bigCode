@@ -9,12 +9,15 @@
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import {
   ApprovalRequestId,
+  DEFAULT_RUNTIME_MODE,
   EventId,
   type ProviderApprovalDecision,
   type ProviderRuntimeEvent,
   type ProviderUserInputAnswers,
+  type RuntimeMode,
   type UserInputQuestion,
 } from "@t3tools/contracts";
+import { FULL_ACCESS_AUTO_APPROVE_AFTER_MS } from "@t3tools/shared/approvals";
 import { Deferred, Effect, Fiber, Random, Ref } from "effect";
 
 import {
@@ -45,10 +48,8 @@ export interface ApprovalHandlerDeps {
   readonly contextRef: Ref.Ref<ClaudeSessionContext | undefined>;
   readonly pendingApprovals: Map<ApprovalRequestId, PendingApproval>;
   readonly pendingUserInputs: Map<ApprovalRequestId, PendingUserInput>;
-  readonly runtimeMode: string | undefined;
+  readonly runtimeMode: RuntimeMode | undefined;
 }
-
-const FULL_ACCESS_AUTO_APPROVE_AFTER_MS = 3_000;
 
 export const makeApprovalHandlers = (deps: ApprovalHandlerDeps) => {
   const {
@@ -217,7 +218,7 @@ export const makeApprovalHandlers = (deps: ApprovalHandlerDeps) => {
       } satisfies PermissionResult;
     }
 
-    const resolvedRuntimeMode = runtimeMode ?? "full-access";
+    const resolvedRuntimeMode = runtimeMode ?? DEFAULT_RUNTIME_MODE;
     const autoApproveAfterMs =
       resolvedRuntimeMode === "full-access" ? FULL_ACCESS_AUTO_APPROVE_AFTER_MS : undefined;
 

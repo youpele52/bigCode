@@ -16,6 +16,8 @@ import {
 import { type Event as OpencodeEvent } from "@opencode-ai/sdk";
 import { Effect } from "effect";
 
+import { FULL_ACCESS_AUTO_APPROVE_AFTER_MS } from "@t3tools/shared/approvals";
+
 import type { ActiveOpencodeSession } from "./OpencodeAdapter.types.ts";
 import {
   eventBase,
@@ -24,7 +26,7 @@ import {
   requestTypeFromPermission,
 } from "./OpencodeAdapter.stream.utils.ts";
 
-export const FULL_ACCESS_AUTO_APPROVE_AFTER_MS = 3_000;
+export { FULL_ACCESS_AUTO_APPROVE_AFTER_MS };
 
 /**
  * Map an OpenCode SSE event to zero or more ProviderRuntimeEvents.

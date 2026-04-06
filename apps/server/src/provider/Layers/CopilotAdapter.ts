@@ -31,6 +31,7 @@ import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 import { ProviderAdapterRequestError, ProviderAdapterSessionNotFoundError } from "../Errors.ts";
 import { CopilotAdapter, type CopilotAdapterShape } from "../Services/CopilotAdapter.ts";
+import { FULL_ACCESS_AUTO_APPROVE_AFTER_MS } from "@t3tools/shared/approvals";
 import {
   PROVIDER,
   USER_INPUT_QUESTION_ID,
@@ -65,8 +66,6 @@ import {
 
 export { makeNodeWrapperCliPath } from "./CopilotAdapter.types.ts";
 export type { CopilotAdapterLiveOptions } from "./CopilotAdapter.types.ts";
-
-const FULL_ACCESS_AUTO_APPROVE_AFTER_MS = 3_000;
 
 const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
   options?: CopilotAdapterLiveOptions,
@@ -207,6 +206,7 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
     pendingApprovals: Map<string, PendingApprovalRequest>,
     pendingUserInputs: Map<string, PendingUserInputRequest>,
     activeTurnId: () => TurnId | undefined,
+    stoppedRef: { stopped: boolean },
   ): SessionConfig => ({
     ...(isCopilotModelSelection(input.modelSelection)
       ? {
@@ -223,6 +223,7 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
         const requestId = randomUUID();
         const currentTurnId = activeTurnId();
         const requestType = requestTypeFromPermissionRequest(request);
+        const requestDetail = requestDetailFromPermissionRequest(request);
         pendingApprovals.set(requestId, {
           requestType,
           turnId: currentTurnId,
@@ -234,9 +235,7 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
           "request.opened",
           {
             requestType,
-            ...(requestDetailFromPermissionRequest(request)
-              ? { detail: requestDetailFromPermissionRequest(request) }
-              : {}),
+            ...(requestDetail ? { detail: requestDetail } : {}),
             args: request,
             ...(input.runtimeMode === "full-access"
               ? { autoApproveAfterMs: FULL_ACCESS_AUTO_APPROVE_AFTER_MS }
@@ -256,6 +255,9 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
         if (input.runtimeMode === "full-access") {
           void Effect.gen(function* () {
             yield* Effect.sleep(FULL_ACCESS_AUTO_APPROVE_AFTER_MS);
+            if (stoppedRef.stopped) {
+              return;
+            }
             const pending = pendingApprovals.get(requestId);
             if (!pending) {
               return;

@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { type ApprovalRequestId, type ProviderApprovalDecision } from "@t3tools/contracts";
 
 import { type PendingApproval } from "../../../logic/session";
@@ -39,18 +39,24 @@ export const PendingApprovalDialog = memo(function PendingApprovalDialog({
   const autoApproveAfterMs = approval.autoApproveAfterMs;
   const requestId = approval.requestId;
 
+  // Store the absolute deadline so that re-renders don't reset the countdown.
+  // Key is `${requestId}:${autoApproveAfterMs}` — a new request or a changed
+  // timeout both produce a fresh deadline.
+  const deadlineRef = useRef<{ key: string; deadlineAt: number } | null>(null);
+  const deadlineKey = `${requestId}:${autoApproveAfterMs}`;
+
   useEffect(() => {
-    if (!open || autoApproveAfterMs === undefined) {
+    if (!open || autoApproveAfterMs === undefined || !requestId) {
       setSecondsRemaining(null);
       return;
     }
 
-    if (!requestId) {
-      setSecondsRemaining(null);
-      return;
+    // Re-anchor only when the request or its timeout changes, not on every render.
+    if (!deadlineRef.current || deadlineRef.current.key !== deadlineKey) {
+      deadlineRef.current = { key: deadlineKey, deadlineAt: Date.now() + autoApproveAfterMs };
     }
+    const { deadlineAt } = deadlineRef.current;
 
-    const deadlineAt = Date.now() + autoApproveAfterMs;
     const updateCountdown = () => {
       const remainingMs = Math.max(0, deadlineAt - Date.now());
       const nextSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
@@ -61,9 +67,11 @@ export const PendingApprovalDialog = memo(function PendingApprovalDialog({
     };
 
     updateCountdown();
-    const interval = window.setInterval(updateCountdown, 250);
+    // 1 s interval — display updates once per second, matching the resolution
+    // of the rendered countdown text.
+    const interval = window.setInterval(updateCountdown, 1_000);
     return () => window.clearInterval(interval);
-  }, [autoApproveAfterMs, onOpenChange, open, requestId]);
+  }, [autoApproveAfterMs, deadlineKey, onOpenChange, open, requestId]);
 
   const autoApproveCopy = useMemo(() => {
     if (autoApproveAfterMs === undefined) {

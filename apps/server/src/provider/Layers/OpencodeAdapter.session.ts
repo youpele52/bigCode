@@ -119,7 +119,36 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
         ApprovalRequestId.makeUnsafe(requestId),
         "accept",
       );
-    });
+    }).pipe(
+      // On failure, emit a synthetic request.resolved(cancel) so the client
+      // dialog closes and the agent doesn't get stuck waiting for an approval
+      // that will never arrive.
+      Effect.catch((error) =>
+        Effect.gen(function* () {
+          console.error(
+            `[opencode-adapter] failed to auto-approve permission request '${requestId}' for thread=${session.threadId} session=${session.opencodeSessionId}:`,
+            error,
+          );
+          const pending = session.pendingPermissions.get(requestId);
+          if (!pending || pending.responding) {
+            return;
+          }
+          // Mark as responding to prevent a duplicate from the manual path.
+          pending.responding = true;
+          session.pendingPermissions.delete(requestId);
+          const cancelEvent = yield* syntheticEventFn(
+            session.threadId,
+            "request.resolved",
+            { requestType: pending.requestType, decision: "cancel" },
+            {
+              ...(pending.turnId ? { turnId: pending.turnId } : {}),
+              requestId,
+            },
+          );
+          yield* emitFn([cancelEvent]);
+        }),
+      ),
+    );
 
   const scheduleAutoApprovePendingPermission = (
     session: ActiveOpencodeSession,
@@ -128,8 +157,10 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
     void autoApprovePendingPermission(session, requestId)
       .pipe(Effect.runPromiseWith(services))
       .catch((error) => {
+        // catchAll above should handle all Effect errors; this catch is a
+        // last-resort safety net for unexpected thrown rejections.
         console.error(
-          `[opencode-adapter] failed to auto-approve permission request '${requestId}' for thread=${session.threadId} session=${session.opencodeSessionId}:`,
+          `[opencode-adapter] unexpected rejection during auto-approve for '${requestId}':`,
           error,
         );
       });

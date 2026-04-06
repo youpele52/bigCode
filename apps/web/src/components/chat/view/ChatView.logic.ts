@@ -215,7 +215,7 @@ export function threadHasStarted(thread: Thread | null | undefined): boolean {
 
 export async function waitForThreadToExist(
   threadId: ThreadId,
-  timeoutMs = 1_000,
+  timeoutMs = 3_000,
 ): Promise<boolean> {
   const getThread = () => useStore.getState().threads.find((thread) => thread.id === threadId);
   if (getThread()) {

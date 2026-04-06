@@ -55,6 +55,10 @@
     "./history": {
       "types": "./src/history.ts",
       "import": "./src/history.ts"
+    },
+    "./approvals": {
+      "types": "./src/approvals.ts",
+      "import": "./src/approvals.ts"
     }
   },
   "scripts": {

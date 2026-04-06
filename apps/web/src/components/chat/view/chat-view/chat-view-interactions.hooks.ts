@@ -23,6 +23,7 @@ import {
 } from "../../provider/composerProviderRegistry";
 import { newCommandId, newMessageId, newThreadId } from "~/lib/utils";
 import { readNativeApi } from "~/rpc/nativeApi";
+import { toastManager } from "../../../ui/toast";
 
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
 import { type ChatViewComposerDerivedState } from "./chat-view-composer-derived.hooks";
@@ -154,45 +155,56 @@ export function useChatViewInteractions({
           threadId: nextThreadId,
         }));
 
-        await api.orchestration.dispatchCommand({
-          type: "thread.create",
-          commandId: newCommandId(),
-          threadId: nextThreadId,
-          projectId: base.activeProject.id,
-          title: base.activeThread.title,
-          modelSelection: nextModelSelection,
-          runtimeMode: base.runtimeMode,
-          interactionMode: base.interactionMode,
-          branch: base.activeThread.branch,
-          worktreePath: base.activeThread.worktreePath,
-          parentThread: {
-            threadId: sourceThreadId,
+        try {
+          await api.orchestration.dispatchCommand({
+            type: "thread.create",
+            commandId: newCommandId(),
+            threadId: nextThreadId,
+            projectId: base.activeProject.id,
             title: base.activeThread.title,
-          },
-          seedMessages: base.activeThread.messages
-            .filter((message) => !message.streaming)
-            .map((message) => ({
-              id: newMessageId(),
-              role: message.role,
-              text: message.text,
-              ...(message.attachments
-                ? {
-                    attachments: message.attachments.map((attachment) => ({
-                      type: attachment.type,
-                      id: attachment.id,
-                      name: attachment.name,
-                      mimeType: attachment.mimeType,
-                      sizeBytes: attachment.sizeBytes,
-                    })),
-                  }
-                : {}),
-              turnId: null,
-              streaming: false,
-              createdAt: message.createdAt,
-              updatedAt: message.completedAt ?? message.createdAt,
-            })),
-          createdAt,
-        });
+            modelSelection: nextModelSelection,
+            runtimeMode: base.runtimeMode,
+            interactionMode: base.interactionMode,
+            branch: base.activeThread.branch,
+            worktreePath: base.activeThread.worktreePath,
+            parentThread: {
+              threadId: sourceThreadId,
+              title: base.activeThread.title,
+            },
+            seedMessages: base.activeThread.messages
+              .filter((message) => !message.streaming)
+              .map((message) => ({
+                id: newMessageId(),
+                role: message.role,
+                text: message.text,
+                ...(message.attachments
+                  ? {
+                      attachments: message.attachments.map((attachment) => ({
+                        type: attachment.type,
+                        id: attachment.id,
+                        name: attachment.name,
+                        mimeType: attachment.mimeType,
+                        sizeBytes: attachment.sizeBytes,
+                      })),
+                    }
+                  : {}),
+                turnId: null,
+                streaming: false,
+                createdAt: message.createdAt,
+                updatedAt: message.completedAt ?? message.createdAt,
+              })),
+            createdAt,
+          });
+        } catch (err) {
+          toastManager.add({
+            type: "error",
+            title: "Failed to create branch",
+            description:
+              err instanceof Error ? err.message : "Could not start a new branch thread.",
+          });
+          runtime.scheduleComposerFocus();
+          return;
+        }
 
         base.setComposerDraftPrompt(nextThreadId, sourceDraft.prompt);
         for (const selection of Object.values(sourceDraft.modelSelectionByProvider)) {

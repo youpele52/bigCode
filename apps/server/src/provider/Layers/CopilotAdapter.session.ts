@@ -84,6 +84,7 @@ export interface SessionOpsDeps {
     pendingApprovals: Map<string, PendingApprovalRequest>,
     pendingUserInputs: Map<string, PendingUserInputRequest>,
     activeTurnId: () => TurnId | undefined,
+    stoppedRef: { stopped: boolean },
   ) => SessionConfig;
   readonly handleEvent: (session: ActiveCopilotSession, event: SessionEvent) => Effect.Effect<void>;
   readonly requireSession: (
@@ -140,6 +141,7 @@ export const makeStartSession =
       const pendingApprovals = new Map<string, PendingApprovalRequest>();
       const pendingUserInputs = new Map<string, PendingUserInputRequest>();
       let activeTurn: TurnId | undefined;
+      const stoppedRef = { stopped: false };
       const sessionConfig = deps.buildSessionConfig(
         {
           threadId: input.threadId,
@@ -150,6 +152,7 @@ export const makeStartSession =
         pendingApprovals,
         pendingUserInputs,
         () => activeTurn,
+        stoppedRef,
       );
 
       const session = yield* Effect.tryPromise({
@@ -194,6 +197,12 @@ export const makeStartSession =
         activeTurnId: undefined,
         activeMessageId: undefined,
         lastUsage: undefined,
+        get stopped() {
+          return stoppedRef.stopped;
+        },
+        set stopped(value: boolean) {
+          stoppedRef.stopped = value;
+        },
       };
 
       record.unsubscribe = session.on((event) => {
@@ -365,6 +374,7 @@ export const stopSessionRecord = (
 ): Effect.Effect<void, ProviderAdapterRequestError> =>
   Effect.tryPromise({
     try: async () => {
+      record.stopped = true;
       record.unsubscribe();
       for (const pending of record.pendingApprovals.values()) {
         pending.resolve({ kind: "denied-interactively-by-user" });
