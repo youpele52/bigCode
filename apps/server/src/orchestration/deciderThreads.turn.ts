@@ -108,6 +108,9 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
           ...(command.titleSeed !== undefined ? { titleSeed: command.titleSeed } : {}),
           runtimeMode: targetThread.runtimeMode,
           interactionMode: targetThread.interactionMode,
+          ...(command.bootstrapSourceThreadId !== undefined
+            ? { bootstrapSourceThreadId: command.bootstrapSourceThreadId }
+            : {}),
           ...(sourceProposedPlan !== undefined ? { sourceProposedPlan } : {}),
           createdAt: command.createdAt,
         },

@@ -209,6 +209,9 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
         ? { modelSelection: event.payload.modelSelection }
         : {}),
       interactionMode: event.payload.interactionMode,
+      ...(event.payload.bootstrapSourceThreadId !== undefined
+        ? { bootstrapSourceThreadId: event.payload.bootstrapSourceThreadId }
+        : {}),
       createdAt: event.payload.createdAt,
     }).pipe(
       Effect.catchCause((cause) =>

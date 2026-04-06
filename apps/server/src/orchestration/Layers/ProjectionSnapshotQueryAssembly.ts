@@ -350,6 +350,7 @@ export function assembleSnapshot(queries: ProjectionSnapshotQuerySql) {
       interactionMode: row.interactionMode,
       branch: row.branch,
       worktreePath: row.worktreePath,
+      ...(row.parentThread !== null ? { parentThread: row.parentThread } : {}),
       latestTurn: latestTurnByThread.get(row.threadId) ?? null,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,

@@ -10,6 +10,7 @@ import { AppSidebarLayout } from "../components/layout/AppSidebarLayout";
 import { Button } from "../components/ui/button";
 import { AnchoredToastProvider, ToastProvider } from "../components/ui/toast";
 import { readNativeApi } from "../rpc/nativeApi";
+import { PendingApprovalNavigation } from "../notifications/pendingApprovalNavigation";
 import { TaskCompletionNotifications } from "../notifications/taskCompletion";
 import { EventRouter, ServerStateBootstrap } from "./__root.logic";
 
@@ -41,6 +42,7 @@ function RootRouteView() {
       <AnchoredToastProvider>
         <ServerStateBootstrap />
         <EventRouter />
+        <PendingApprovalNavigation />
         <TaskCompletionNotifications />
         <AppSidebarLayout>
           <Outlet />

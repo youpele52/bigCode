@@ -104,7 +104,8 @@ export function partializeComposerDraftStoreState(
       draft.terminalContexts.length === 0 &&
       !hasModelData &&
       draft.runtimeMode === null &&
-      draft.interactionMode === null
+      draft.interactionMode === null &&
+      (draft.bootstrapSourceThreadId ?? null) === null
     ) {
       continue;
     }
@@ -132,6 +133,9 @@ export function partializeComposerDraftStoreState(
         : {}),
       ...(draft.runtimeMode ? { runtimeMode: draft.runtimeMode } : {}),
       ...(draft.interactionMode ? { interactionMode: draft.interactionMode } : {}),
+      ...(draft.bootstrapSourceThreadId !== null
+        ? { bootstrapSourceThreadId: draft.bootstrapSourceThreadId }
+        : {}),
     };
     persistedDraftsByThreadId[threadId as ThreadId] = persistedDraft;
   }
@@ -220,5 +224,6 @@ export function toHydratedThreadDraft(
     activeProvider,
     runtimeMode: persistedDraft.runtimeMode ?? null,
     interactionMode: persistedDraft.interactionMode ?? null,
+    bootstrapSourceThreadId: persistedDraft.bootstrapSourceThreadId ?? null,
   };
 }

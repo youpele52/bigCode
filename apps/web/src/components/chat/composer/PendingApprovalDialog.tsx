@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { type ApprovalRequestId, type ProviderApprovalDecision } from "@t3tools/contracts";
 
 import { type PendingApproval } from "../../../logic/session";
@@ -35,6 +35,42 @@ export const PendingApprovalDialog = memo(function PendingApprovalDialog({
   onRespondToApproval,
 }: PendingApprovalDialogProps) {
   const approvalCopy = describePendingApproval(approval);
+  const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
+  const autoApproveAfterMs = approval.autoApproveAfterMs;
+  const requestId = approval.requestId;
+
+  useEffect(() => {
+    if (!open || autoApproveAfterMs === undefined) {
+      setSecondsRemaining(null);
+      return;
+    }
+
+    if (!requestId) {
+      setSecondsRemaining(null);
+      return;
+    }
+
+    const deadlineAt = Date.now() + autoApproveAfterMs;
+    const updateCountdown = () => {
+      const remainingMs = Math.max(0, deadlineAt - Date.now());
+      const nextSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+      setSecondsRemaining(nextSeconds);
+      if (remainingMs === 0) {
+        onOpenChange(false);
+      }
+    };
+
+    updateCountdown();
+    const interval = window.setInterval(updateCountdown, 250);
+    return () => window.clearInterval(interval);
+  }, [autoApproveAfterMs, onOpenChange, open, requestId]);
+
+  const autoApproveCopy = useMemo(() => {
+    if (autoApproveAfterMs === undefined) {
+      return null;
+    }
+    return `Auto-approves in ${secondsRemaining ?? Math.ceil(autoApproveAfterMs / 1000)}s unless you respond first.`;
+  }, [autoApproveAfterMs, secondsRemaining]);
 
   return (
     <Dialog
@@ -54,6 +90,11 @@ export const PendingApprovalDialog = memo(function PendingApprovalDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogPanel className="space-y-4">
+          {autoApproveCopy ? (
+            <div className="rounded-xl border border-primary/30 bg-primary/10 p-3 text-sm text-foreground">
+              {autoApproveCopy}
+            </div>
+          ) : null}
           {approval.detail ? (
             <div className="rounded-xl border border-border/70 bg-muted/24 p-3">
               <p className="mb-2 font-medium text-sm">Requested action</p>

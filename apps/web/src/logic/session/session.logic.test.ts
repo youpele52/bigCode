@@ -115,6 +115,34 @@ describe("derivePendingApprovals", () => {
     ]);
   });
 
+  it("preserves auto-approve countdown metadata for full-access approvals", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "approval-open-auto",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "approval.requested",
+        summary: "Command approval requested",
+        tone: "approval",
+        payload: {
+          requestId: "req-auto-1",
+          requestType: "command_execution_approval",
+          detail: "pwd",
+          autoApproveAfterMs: 3000,
+        },
+      }),
+    ];
+
+    expect(derivePendingApprovals(activities)).toEqual([
+      {
+        requestId: "req-auto-1",
+        requestKind: "command",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        detail: "pwd",
+        autoApproveAfterMs: 3000,
+      },
+    ]);
+  });
+
   it("clears stale pending approvals when provider reports unknown pending request", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({

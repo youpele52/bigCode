@@ -48,6 +48,8 @@ export interface ApprovalHandlerDeps {
   readonly runtimeMode: string | undefined;
 }
 
+const FULL_ACCESS_AUTO_APPROVE_AFTER_MS = 3_000;
+
 export const makeApprovalHandlers = (deps: ApprovalHandlerDeps) => {
   const {
     makeEventStamp,
@@ -216,12 +218,8 @@ export const makeApprovalHandlers = (deps: ApprovalHandlerDeps) => {
     }
 
     const resolvedRuntimeMode = runtimeMode ?? "full-access";
-    if (resolvedRuntimeMode === "full-access") {
-      return {
-        behavior: "allow",
-        updatedInput: toolInput,
-      } satisfies PermissionResult;
-    }
+    const autoApproveAfterMs =
+      resolvedRuntimeMode === "full-access" ? FULL_ACCESS_AUTO_APPROVE_AFTER_MS : undefined;
 
     const requestId = ApprovalRequestId.makeUnsafe(yield* Random.nextUUIDv4);
     const requestType = classifyRequestType(toolName);
@@ -246,6 +244,7 @@ export const makeApprovalHandlers = (deps: ApprovalHandlerDeps) => {
       payload: {
         requestType,
         detail,
+        ...(autoApproveAfterMs !== undefined ? { autoApproveAfterMs } : {}),
         args: {
           toolName,
           input: toolInput,
@@ -266,6 +265,19 @@ export const makeApprovalHandlers = (deps: ApprovalHandlerDeps) => {
     });
 
     pendingApprovals.set(requestId, pendingApproval);
+
+    if (autoApproveAfterMs !== undefined) {
+      runFork(
+        Effect.gen(function* () {
+          yield* Effect.sleep(autoApproveAfterMs);
+          if (!pendingApprovals.has(requestId)) {
+            return;
+          }
+          pendingApprovals.delete(requestId);
+          yield* Deferred.succeed(decisionDeferred, "accept");
+        }),
+      );
+    }
 
     const onAbort = () => {
       if (!pendingApprovals.has(requestId)) {

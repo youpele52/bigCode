@@ -24,6 +24,8 @@ import {
   requestTypeFromPermission,
 } from "./OpencodeAdapter.stream.utils.ts";
 
+export const FULL_ACCESS_AUTO_APPROVE_AFTER_MS = 3_000;
+
 /**
  * Map an OpenCode SSE event to zero or more ProviderRuntimeEvents.
  */
@@ -340,6 +342,7 @@ export function makeMapEvent(
               requestType: reqType,
               turnId,
               permissionId: permission.id,
+              responding: false,
             });
 
             return [
@@ -359,6 +362,9 @@ export function makeMapEvent(
                     ? { detail: requestDetailFromPermission(permission) }
                     : {}),
                   args: permission,
+                  ...(session.runtimeMode === "full-access"
+                    ? { autoApproveAfterMs: FULL_ACCESS_AUTO_APPROVE_AFTER_MS }
+                    : {}),
                 },
               },
             ];

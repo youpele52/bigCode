@@ -174,6 +174,7 @@ export function mapThread(thread: OrchestrationThread): Thread {
     id: thread.id,
     codexThreadId: null,
     projectId: thread.projectId,
+    ...(thread.parentThread ? { parentThread: thread.parentThread } : {}),
     title: thread.title,
     modelSelection: normalizeModelSlug(thread.modelSelection),
     runtimeMode: thread.runtimeMode,
@@ -231,6 +232,7 @@ export function buildSidebarThreadSummary(thread: Thread): SidebarThreadSummary 
   return {
     id: thread.id,
     projectId: thread.projectId,
+    ...(thread.parentThread ? { parentThread: thread.parentThread } : {}),
     title: thread.title,
     interactionMode: thread.interactionMode,
     session: thread.session,

@@ -10,6 +10,7 @@ import {
   MessageId,
   NonNegativeInt,
   OrchestrationCheckpointFile,
+  ParentThreadReference,
   OrchestrationProposedPlanId,
   ModelSelection,
   ProjectId,
@@ -50,6 +51,7 @@ export const ProjectionThreadProposedPlanDbRowSchema = ProjectionThreadProposedP
 export const ProjectionThreadDbRowSchema = ProjectionThread.mapFields(
   Struct.assign({
     modelSelection: Schema.fromJsonString(ModelSelection),
+    parentThread: Schema.NullOr(Schema.fromJsonString(ParentThreadReference)),
   }),
 );
 export const ProjectionThreadActivityDbRowSchema = ProjectionThreadActivity.mapFields(
@@ -143,6 +145,10 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           interaction_mode AS "interactionMode",
           branch,
           worktree_path AS "worktreePath",
+          CASE
+            WHEN parent_thread_id IS NULL OR parent_thread_title IS NULL THEN NULL
+            ELSE json_object('threadId', parent_thread_id, 'title', parent_thread_title)
+          END AS "parentThread",
           latest_turn_id AS "latestTurnId",
           created_at AS "createdAt",
           updated_at AS "updatedAt",

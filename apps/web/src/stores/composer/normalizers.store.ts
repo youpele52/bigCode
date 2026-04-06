@@ -243,6 +243,11 @@ export function normalizePersistedDraftsByThreadId(
       draftCandidate.interactionMode === "plan" || draftCandidate.interactionMode === "default"
         ? draftCandidate.interactionMode
         : null;
+    const bootstrapSourceThreadId =
+      typeof draftCandidate.bootstrapSourceThreadId === "string" &&
+      draftCandidate.bootstrapSourceThreadId.length > 0
+        ? (draftCandidate.bootstrapSourceThreadId as ThreadId)
+        : null;
     const prompt = ensureInlineTerminalContextPlaceholders(
       promptCandidate,
       terminalContexts.length,
@@ -303,7 +308,8 @@ export function normalizePersistedDraftsByThreadId(
       terminalContexts.length === 0 &&
       !hasModelData &&
       !runtimeMode &&
-      !interactionMode
+      !interactionMode &&
+      bootstrapSourceThreadId === null
     ) {
       continue;
     }
@@ -314,6 +320,7 @@ export function normalizePersistedDraftsByThreadId(
       ...(hasModelData ? { modelSelectionByProvider, activeProvider } : {}),
       ...(runtimeMode ? { runtimeMode } : {}),
       ...(interactionMode ? { interactionMode } : {}),
+      ...(bootstrapSourceThreadId !== null ? { bootstrapSourceThreadId } : {}),
     };
   }
 

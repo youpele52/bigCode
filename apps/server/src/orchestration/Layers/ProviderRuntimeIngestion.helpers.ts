@@ -174,6 +174,9 @@ export function runtimeEventToActivities(
             ...(requestKind ? { requestKind } : {}),
             requestType: event.payload.requestType,
             ...(event.payload.detail ? { detail: truncateDetail(event.payload.detail) } : {}),
+            ...(typeof event.payload.autoApproveAfterMs === "number"
+              ? { autoApproveAfterMs: event.payload.autoApproveAfterMs }
+              : {}),
           },
           turnId: toTurnId(event.turnId) ?? null,
           ...maybeSequence,

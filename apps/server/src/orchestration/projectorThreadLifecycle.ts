@@ -47,6 +47,7 @@ export function projectThreadCreated(
         updatedAt: payload.updatedAt,
         archivedAt: null,
         deletedAt: null,
+        ...(payload.parentThread !== undefined ? { parentThread: payload.parentThread } : {}),
         messages: [],
         activities: [],
         checkpoints: [],

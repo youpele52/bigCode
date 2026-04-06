@@ -163,6 +163,10 @@ export function derivePendingApprovals(
           ? requestKindFromRequestType(payload.requestType)
           : null;
     const detail = payload && typeof payload.detail === "string" ? payload.detail : undefined;
+    const autoApproveAfterMs =
+      payload && typeof payload.autoApproveAfterMs === "number"
+        ? payload.autoApproveAfterMs
+        : undefined;
 
     if (activity.kind === "approval.requested" && requestId) {
       openByRequestId.set(requestId, {
@@ -170,6 +174,7 @@ export function derivePendingApprovals(
         requestKind: requestKind ?? "tool",
         createdAt: activity.createdAt,
         ...(detail ? { detail } : {}),
+        ...(autoApproveAfterMs !== undefined ? { autoApproveAfterMs } : {}),
       });
       continue;
     }

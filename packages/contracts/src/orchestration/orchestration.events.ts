@@ -28,6 +28,7 @@ import {
   OrchestrationCheckpointFile,
   OrchestrationCheckpointStatus,
   OrchestrationMessageRole,
+  ParentThreadReference,
   OrchestrationProposedPlan,
   OrchestrationSession,
   OrchestrationThreadActivity,
@@ -98,6 +99,7 @@ export const ThreadCreatedPayload = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  parentThread: Schema.optional(ParentThreadReference),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });
@@ -162,6 +164,7 @@ export const ThreadTurnStartRequestedPayload = Schema.Struct({
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(() => DEFAULT_PROVIDER_INTERACTION_MODE),
   ),
+  bootstrapSourceThreadId: Schema.optional(ThreadId),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
   createdAt: IsoDateTime,
 });

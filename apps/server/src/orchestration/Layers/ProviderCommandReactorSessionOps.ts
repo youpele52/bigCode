@@ -27,7 +27,7 @@ import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.t
 import type { ProviderServiceShape } from "../../provider/Services/ProviderService.ts";
 import { ProviderValidationError } from "../../provider/Errors.ts";
 import type { ServerSettingsShape } from "../../ws/serverSettings.ts";
-import type { OrchestrationDispatchError } from "../Errors.ts";
+import { OrchestrationCommandInvariantError, type OrchestrationDispatchError } from "../Errors.ts";
 import {
   buildGeneratedWorktreeBranchName,
   canReplaceThreadTitle,
@@ -55,10 +55,14 @@ export type SessionOpServices = {
 
 function shouldRebuildProviderContextFromTranscript(input: {
   readonly thread: OrchestrationThread;
+  readonly bootstrapThread: OrchestrationThread | null;
   readonly activeSession: ProviderSession | undefined;
   readonly messageText: string;
   readonly attachments: ReadonlyArray<ChatAttachment>;
 }): boolean {
+  if (input.bootstrapThread) {
+    return input.bootstrapThread.messages.length > 0 && !hasImageAttachments(input.attachments);
+  }
   if (input.activeSession) {
     return false;
   }
@@ -72,10 +76,10 @@ function shouldRebuildProviderContextFromTranscript(input: {
 }
 
 function buildResumedTurnInput(input: {
-  readonly thread: OrchestrationThread;
+  readonly transcriptThread: OrchestrationThread;
   readonly messageText: string;
 }): string {
-  const previousMessages = input.thread.messages.filter(
+  const previousMessages = input.transcriptThread.messages.filter(
     (message): message is OrchestrationMessage => message.role !== "system",
   );
   const transcriptMessages =
@@ -253,12 +257,31 @@ export const sendTurnForThread = (services: SessionOpServices) =>
     readonly attachments?: ReadonlyArray<ChatAttachment>;
     readonly modelSelection?: ModelSelection;
     readonly interactionMode?: "default" | "plan";
+    readonly bootstrapSourceThreadId?: ThreadId;
     readonly createdAt: string;
   }) {
     const { providerService, threadModelSelections, resolveThread } = services;
     const thread = yield* resolveThread(input.threadId);
     if (!thread) {
       return;
+    }
+    const bootstrapThread =
+      input.bootstrapSourceThreadId !== undefined
+        ? ((yield* resolveThread(input.bootstrapSourceThreadId)) ?? null)
+        : null;
+    if (input.bootstrapSourceThreadId !== undefined) {
+      if (!bootstrapThread) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: "thread.turn.start",
+          detail: `Bootstrap source thread '${input.bootstrapSourceThreadId}' does not exist.`,
+        });
+      }
+      if (bootstrapThread.projectId !== thread.projectId) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: "thread.turn.start",
+          detail: `Bootstrap source thread '${input.bootstrapSourceThreadId}' must belong to project '${thread.projectId}'.`,
+        });
+      }
     }
     const normalizedAttachments = input.attachments ?? [];
     const activeSession = yield* providerService
@@ -268,6 +291,7 @@ export const sendTurnForThread = (services: SessionOpServices) =>
       );
     const shouldBootstrapFromTranscript = shouldRebuildProviderContextFromTranscript({
       thread,
+      bootstrapThread,
       activeSession,
       messageText: input.messageText,
       attachments: normalizedAttachments,
@@ -284,7 +308,7 @@ export const sendTurnForThread = (services: SessionOpServices) =>
     const normalizedInput = toNonEmptyProviderInput(
       shouldBootstrapFromTranscript
         ? buildResumedTurnInput({
-            thread,
+            transcriptThread: bootstrapThread ?? thread,
             messageText: input.messageText,
           })
         : input.messageText,

@@ -1650,6 +1650,7 @@ describe("ProviderRuntimeIngestion", () => {
       payload: {
         requestType: "command_execution_approval",
         detail: "pwd",
+        autoApproveAfterMs: 3_000,
       },
     });
 
@@ -1690,6 +1691,7 @@ describe("ProviderRuntimeIngestion", () => {
         : undefined;
     expect(requestedPayload?.requestKind).toBe("command");
     expect(requestedPayload?.requestType).toBe("command_execution_approval");
+    expect(requestedPayload?.autoApproveAfterMs).toBe(3_000);
 
     const resolved = thread?.activities.find(
       (activity: ProviderRuntimeTestActivity) => activity.id === "evt-request-resolved",

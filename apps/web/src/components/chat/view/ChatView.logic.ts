@@ -213,6 +213,48 @@ export function threadHasStarted(thread: Thread | null | undefined): boolean {
   );
 }
 
+export async function waitForThreadToExist(
+  threadId: ThreadId,
+  timeoutMs = 1_000,
+): Promise<boolean> {
+  const getThread = () => useStore.getState().threads.find((thread) => thread.id === threadId);
+  if (getThread()) {
+    return true;
+  }
+
+  return await new Promise<boolean>((resolve) => {
+    let settled = false;
+    let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
+    const finish = (result: boolean) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timeoutId !== null) {
+        globalThis.clearTimeout(timeoutId);
+      }
+      unsubscribe();
+      resolve(result);
+    };
+
+    const unsubscribe = useStore.subscribe((state) => {
+      if (!state.threads.some((thread) => thread.id === threadId)) {
+        return;
+      }
+      finish(true);
+    });
+
+    if (getThread()) {
+      finish(true);
+      return;
+    }
+
+    timeoutId = globalThis.setTimeout(() => {
+      finish(false);
+    }, timeoutMs);
+  });
+}
+
 export async function waitForStartedServerThread(
   threadId: ThreadId,
   timeoutMs = 1_000,

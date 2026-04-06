@@ -175,6 +175,7 @@ export const RequestOpenedPayload = Schema.Struct({
   requestType: CanonicalRequestType,
   detail: Schema.optional(TrimmedNonEmptyStringSchema),
   args: Schema.optional(Schema.Unknown),
+  autoApproveAfterMs: Schema.optional(NonNegativeInt),
 });
 export type RequestOpenedPayload = typeof RequestOpenedPayload.Type;
 

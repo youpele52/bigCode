@@ -272,7 +272,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
         ? modelSelection.options.thinking
         : undefined;
     const effectiveEffort = getEffectiveClaudeCodeEffort(effort);
-    const permissionMode = input.runtimeMode === "full-access" ? "bypassPermissions" : undefined;
+    const permissionMode = undefined;
     const settings = {
       ...(typeof thinking === "boolean" ? { alwaysThinkingEnabled: thinking } : {}),
       ...(fastMode ? { fastMode: true } : {}),
@@ -285,7 +285,6 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       settingSources: [...CLAUDE_SETTING_SOURCES],
       ...(effectiveEffort ? { effort: effectiveEffort } : {}),
       ...(permissionMode ? { permissionMode } : {}),
-      ...(permissionMode === "bypassPermissions" ? { allowDangerouslySkipPermissions: true } : {}),
       ...(Object.keys(settings).length > 0 ? { settings } : {}),
       ...(existingResumeSessionId ? { resume: existingResumeSessionId } : {}),
       ...(newSessionId ? { sessionId: newSessionId } : {}),

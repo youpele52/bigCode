@@ -53,6 +53,7 @@ export const PersistedComposerThreadDraftState = Schema.Struct({
   activeProvider: Schema.optionalKey(Schema.NullOr(ProviderKind)),
   runtimeMode: Schema.optionalKey(RuntimeMode),
   interactionMode: Schema.optionalKey(ProviderInteractionMode),
+  bootstrapSourceThreadId: Schema.optionalKey(Schema.NullOr(ThreadId)),
 });
 export type PersistedComposerThreadDraftState = typeof PersistedComposerThreadDraftState.Type;
 
@@ -133,6 +134,7 @@ export interface ComposerThreadDraftState {
   activeProvider: ProviderKind | null;
   runtimeMode: RuntimeMode | null;
   interactionMode: ProviderInteractionMode | null;
+  bootstrapSourceThreadId: ThreadId | null;
 }
 
 export interface DraftThreadState {
@@ -228,6 +230,10 @@ export interface ComposerDraftStoreState {
     attachments: PersistedComposerImageAttachment[],
   ) => void;
   clearComposerContent: (threadId: ThreadId) => void;
+  setBootstrapSourceThreadId: (
+    threadId: ThreadId,
+    sourceThreadId: ThreadId | null | undefined,
+  ) => void;
 }
 
 export interface EffectiveComposerModelState {
@@ -246,6 +252,7 @@ export const EMPTY_THREAD_DRAFT = Object.freeze<ComposerThreadDraftState>({
   activeProvider: null,
   runtimeMode: null,
   interactionMode: null,
+  bootstrapSourceThreadId: null,
 });
 
 export const EMPTY_PERSISTED_DRAFT_STORE_STATE = Object.freeze<PersistedComposerDraftStoreState>({

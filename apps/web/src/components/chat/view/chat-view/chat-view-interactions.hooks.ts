@@ -2,6 +2,7 @@ import type { MessageId, ModelSelection, ProviderKind, TurnId } from "@t3tools/c
 import { useCallback, useEffect } from "react";
 
 import { type DraftThreadEnvMode } from "~/stores/composer";
+import { useComposerDraftStore } from "~/stores/composer";
 import { resolveAppModelSelection, resolveSelectableProvider } from "~/models/provider";
 import { proposedPlanTitle } from "~/logic/proposed-plan";
 import { stripDiffSearchParams } from "~/utils/diff";
@@ -15,10 +16,13 @@ import { useComposerCommandHandlers } from "../ChatView.composerCommandHandlers.
 import { useChatKeybindings } from "../ChatView.keybindings.logic";
 import { usePlanHandlers } from "../ChatView.planHandlers.logic";
 import { useOnSend } from "../ChatView.sendTurn.logic";
+import { waitForThreadToExist } from "../ChatView.logic";
 import {
   renderProviderTraitsMenuContent,
   renderProviderTraitsPicker,
 } from "../../provider/composerProviderRegistry";
+import { newCommandId, newMessageId, newThreadId } from "~/lib/utils";
+import { readNativeApi } from "~/rpc/nativeApi";
 
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
 import { type ChatViewComposerDerivedState } from "./chat-view-composer-derived.hooks";
@@ -93,12 +97,8 @@ export function useChatViewInteractions({
       : "local";
 
   const onProviderModelSelect = useCallback(
-    (provider: ProviderKind, model: string, subProviderID?: string) => {
+    async (provider: ProviderKind, model: string, subProviderID?: string) => {
       if (!base.activeThread) return;
-      if (composer.lockedProvider !== null && provider !== composer.lockedProvider) {
-        runtime.scheduleComposerFocus();
-        return;
-      }
       const resolvedProvider = resolveSelectableProvider(composer.providerStatuses, provider);
       const resolvedModel = resolveAppModelSelection(
         resolvedProvider,
@@ -118,6 +118,112 @@ export function useChatViewInteractions({
           ? { subProviderID: matchedServerModel.subProviderID }
           : {}),
       };
+      const boundProvider = composer.sessionProvider ?? composer.threadProvider;
+      const shouldBranchOnProviderChange =
+        composer.hasThreadStarted && boundProvider !== null && resolvedProvider !== boundProvider;
+
+      if (shouldBranchOnProviderChange) {
+        const api = readNativeApi();
+        if (!api || !base.activeProject || !base.activeThread || !base.isServerThread) {
+          runtime.scheduleComposerFocus();
+          return;
+        }
+
+        const targetLabel =
+          resolvedProvider === "claudeAgent"
+            ? "Claude"
+            : resolvedProvider === "copilot"
+              ? "Copilot"
+              : resolvedProvider === "opencode"
+                ? "OpenCode"
+                : "Codex";
+        const confirmed = await api.dialogs.confirm(
+          `Switch to ${targetLabel}? This will start a new branch.`,
+        );
+        if (!confirmed) {
+          runtime.scheduleComposerFocus();
+          return;
+        }
+
+        const nextThreadId = newThreadId();
+        const createdAt = new Date().toISOString();
+        const sourceThreadId = base.activeThread.id;
+        const sourceDraft = base.composerDraft;
+        const sourceDraftContexts = sourceDraft.terminalContexts.map((context) => ({
+          ...context,
+          threadId: nextThreadId,
+        }));
+
+        await api.orchestration.dispatchCommand({
+          type: "thread.create",
+          commandId: newCommandId(),
+          threadId: nextThreadId,
+          projectId: base.activeProject.id,
+          title: base.activeThread.title,
+          modelSelection: nextModelSelection,
+          runtimeMode: base.runtimeMode,
+          interactionMode: base.interactionMode,
+          branch: base.activeThread.branch,
+          worktreePath: base.activeThread.worktreePath,
+          parentThread: {
+            threadId: sourceThreadId,
+            title: base.activeThread.title,
+          },
+          seedMessages: base.activeThread.messages
+            .filter((message) => !message.streaming)
+            .map((message) => ({
+              id: newMessageId(),
+              role: message.role,
+              text: message.text,
+              ...(message.attachments
+                ? {
+                    attachments: message.attachments.map((attachment) => ({
+                      type: attachment.type,
+                      id: attachment.id,
+                      name: attachment.name,
+                      mimeType: attachment.mimeType,
+                      sizeBytes: attachment.sizeBytes,
+                    })),
+                  }
+                : {}),
+              turnId: null,
+              streaming: false,
+              createdAt: message.createdAt,
+              updatedAt: message.completedAt ?? message.createdAt,
+            })),
+          createdAt,
+        });
+
+        base.setComposerDraftPrompt(nextThreadId, sourceDraft.prompt);
+        for (const selection of Object.values(sourceDraft.modelSelectionByProvider)) {
+          if (selection) {
+            base.setComposerDraftModelSelection(nextThreadId, selection);
+          }
+        }
+        base.setComposerDraftModelSelection(nextThreadId, nextModelSelection);
+        base.setComposerDraftRuntimeMode(nextThreadId, base.runtimeMode);
+        base.setComposerDraftInteractionMode(nextThreadId, base.interactionMode);
+        if (sourceDraft.images.length > 0) {
+          useComposerDraftStore.getState().addImages(
+            nextThreadId,
+            sourceDraft.images.map((image) => image),
+          );
+        }
+        if (sourceDraftContexts.length > 0) {
+          base.setComposerDraftTerminalContexts(nextThreadId, sourceDraftContexts);
+        }
+        base.setBootstrapSourceThreadId(nextThreadId, sourceThreadId);
+
+        const threadExists = await waitForThreadToExist(nextThreadId);
+        if (!threadExists) {
+          runtime.scheduleComposerFocus();
+          return;
+        }
+        await base.navigate({ to: "/$threadId", params: { threadId: nextThreadId } });
+        runtime.scheduleComposerFocus();
+        return;
+      }
+
       base.setComposerDraftModelSelection(base.activeThread.id, nextModelSelection);
       base.setStickyComposerModelSelection(nextModelSelection);
       runtime.scheduleComposerFocus();
@@ -251,6 +357,8 @@ export function useChatViewInteractions({
     beginLocalDispatch: thread.beginLocalDispatch,
     resetLocalDispatch: thread.resetLocalDispatch,
     forceStickToBottom: runtime.scrollBehavior.forceStickToBottom,
+    bootstrapSourceThreadId: base.composerDraft.bootstrapSourceThreadId,
+    clearBootstrapSourceThreadId: (threadId) => base.setBootstrapSourceThreadId(threadId, null),
     persistThreadSettingsForNextTurn: runtime.persistThreadSettingsForNextTurn,
     onSubmitPlanFollowUp: planHandlers.onSubmitPlanFollowUp,
     handleInteractionModeChange: runtime.handleInteractionModeChange,

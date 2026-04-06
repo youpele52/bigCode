@@ -150,7 +150,11 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
         });
       }
 
-      record.pendingPermissions.delete(requestId);
+      if (pending.responding) {
+        return;
+      }
+
+      pending.responding = true;
 
       // Respond via the OpenCode SDK permission API
       yield* Effect.tryPromise({
@@ -173,7 +177,15 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
             detail: toMessage(cause, "Failed to respond to OpenCode permission request."),
             cause,
           }),
-      });
+      }).pipe(
+        Effect.tapError(() =>
+          Effect.sync(() => {
+            pending.responding = false;
+          }),
+        ),
+      );
+
+      record.pendingPermissions.delete(requestId);
 
       const event = yield* syntheticEventFn(
         threadId,

@@ -25,7 +25,7 @@ import {
   findSidebarProposedPlan,
 } from "../../../../logic/session";
 import { EMPTY_PENDING_USER_INPUT_ANSWERS } from "./shared";
-import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
+import type { ChatViewBaseState } from "./chat-view-base-state.hooks";
 
 export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
   const {

@@ -54,6 +54,7 @@ export interface PendingApproval {
   requestKind: "command" | "file-read" | "file-change" | "tool";
   createdAt: string;
   detail?: string;
+  autoApproveAfterMs?: number;
 }
 
 export interface PendingUserInput {

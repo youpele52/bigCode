@@ -359,5 +359,31 @@ export function createComposerContentActions(
         return { draftsByThreadId: nextDraftsByThreadId };
       });
     },
+    setBootstrapSourceThreadId: (
+      threadId: ThreadId,
+      sourceThreadId: ThreadId | null | undefined,
+    ) => {
+      if (threadId.length === 0) {
+        return;
+      }
+      const normalizedSourceThreadId = sourceThreadId ?? null;
+      set((state) => {
+        const existing = state.draftsByThreadId[threadId];
+        if (!existing && normalizedSourceThreadId === null) {
+          return state;
+        }
+        const nextDraft: ComposerThreadDraftState = {
+          ...(existing ?? createEmptyThreadDraft()),
+          bootstrapSourceThreadId: normalizedSourceThreadId,
+        };
+        const nextDraftsByThreadId = { ...state.draftsByThreadId };
+        if (shouldRemoveDraft(nextDraft)) {
+          delete nextDraftsByThreadId[threadId];
+        } else {
+          nextDraftsByThreadId[threadId] = nextDraft;
+        }
+        return { draftsByThreadId: nextDraftsByThreadId };
+      });
+    },
   };
 }

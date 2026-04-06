@@ -32,6 +32,7 @@ export function makeHandleEvent(
   makeEventStamp: () => Effect.Effect<{ eventId: EventId; createdAt: string }>,
   nativeEventLogger: EventNdjsonLogger | undefined,
   emitFn: (events: ReadonlyArray<ProviderRuntimeEvent>) => Effect.Effect<void>,
+  scheduleAutoApprovePendingPermission: (session: ActiveOpencodeSession, requestId: string) => void,
 ) {
   const mapEventFn = makeMapEvent(nextEventId, makeEventStamp);
   return Effect.fn("handleEvent")(function* (session: ActiveOpencodeSession, event: OpencodeEvent) {
@@ -46,6 +47,14 @@ export function makeHandleEvent(
     const mapped = yield* mapEventFn(session, event);
     if (mapped.length > 0) {
       yield* emitFn(mapped);
+
+      if (session.runtimeMode === "full-access") {
+        for (const mappedEvent of mapped) {
+          if (mappedEvent.type === "request.opened" && mappedEvent.requestId) {
+            scheduleAutoApprovePendingPermission(session, mappedEvent.requestId);
+          }
+        }
+      }
     }
   });
 }

@@ -25,6 +25,7 @@ export interface PendingPermissionRequest {
     | "unknown";
   readonly turnId: TurnId | undefined;
   readonly permissionId: string;
+  responding: boolean;
 }
 
 /** Tracks an in-flight tui.prompt.append question awaiting a user answer. */

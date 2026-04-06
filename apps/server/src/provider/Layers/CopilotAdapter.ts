@@ -66,6 +66,8 @@ import {
 export { makeNodeWrapperCliPath } from "./CopilotAdapter.types.ts";
 export type { CopilotAdapterLiveOptions } from "./CopilotAdapter.types.ts";
 
+const FULL_ACCESS_AUTO_APPROVE_AFTER_MS = 3_000;
+
 const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
   options?: CopilotAdapterLiveOptions,
 ) {
@@ -217,15 +219,12 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
     ...(input.cwd ? { workingDirectory: input.cwd } : {}),
     streaming: true,
     onPermissionRequest: (request) => {
-      if (input.runtimeMode === "full-access") {
-        return { kind: "approved" };
-      }
-
       return new Promise<PermissionRequestResult>((resolve) => {
         const requestId = randomUUID();
         const currentTurnId = activeTurnId();
+        const requestType = requestTypeFromPermissionRequest(request);
         pendingApprovals.set(requestId, {
-          requestType: requestTypeFromPermissionRequest(request),
+          requestType,
           turnId: currentTurnId,
           resolve,
         });
@@ -234,11 +233,14 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
           input.threadId,
           "request.opened",
           {
-            requestType: requestTypeFromPermissionRequest(request),
+            requestType,
             ...(requestDetailFromPermissionRequest(request)
               ? { detail: requestDetailFromPermissionRequest(request) }
               : {}),
             args: request,
+            ...(input.runtimeMode === "full-access"
+              ? { autoApproveAfterMs: FULL_ACCESS_AUTO_APPROVE_AFTER_MS }
+              : {}),
           },
           {
             ...(currentTurnId ? { turnId: currentTurnId } : {}),
@@ -250,6 +252,35 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
             Effect.runPromise,
           )
           .catch(() => undefined);
+
+        if (input.runtimeMode === "full-access") {
+          void Effect.gen(function* () {
+            yield* Effect.sleep(FULL_ACCESS_AUTO_APPROVE_AFTER_MS);
+            const pending = pendingApprovals.get(requestId);
+            if (!pending) {
+              return;
+            }
+
+            pendingApprovals.delete(requestId);
+            pending.resolve({ kind: "approved" });
+
+            const event = yield* makeSyntheticEvent(
+              input.threadId,
+              "request.resolved",
+              {
+                requestType,
+                decision: "accept",
+              },
+              {
+                ...(currentTurnId ? { turnId: currentTurnId } : {}),
+                requestId,
+              },
+            );
+            yield* emit([event]);
+          })
+            .pipe(Effect.runPromise)
+            .catch(() => undefined);
+        }
       });
     },
     onUserInputRequest: (request: CopilotUserInputRequest, _invocation) =>

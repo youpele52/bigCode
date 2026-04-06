@@ -266,7 +266,7 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
-  it.effect("derives bypass permission mode from full-access runtime policy", () => {
+  it.effect("keeps Claude permissions enabled in full-access runtime mode", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
@@ -278,8 +278,8 @@ describe("ClaudeAdapterLive", () => {
 
       const createInput = harness.getLastCreateQueryInput();
       assert.deepEqual(createInput?.options.settingSources, ["user", "project", "local"]);
-      assert.equal(createInput?.options.permissionMode, "bypassPermissions");
-      assert.equal(createInput?.options.allowDangerouslySkipPermissions, true);
+      assert.equal(createInput?.options.permissionMode, undefined);
+      assert.equal(createInput?.options.allowDangerouslySkipPermissions, undefined);
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),
@@ -306,7 +306,7 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
-  it.effect("uses bypass permissions for full-access claude sessions", () => {
+  it.effect("starts full-access claude sessions without bypassing SDK permissions", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
@@ -317,8 +317,8 @@ describe("ClaudeAdapterLive", () => {
       });
 
       const createInput = harness.getLastCreateQueryInput();
-      assert.equal(createInput?.options.permissionMode, "bypassPermissions");
-      assert.equal(createInput?.options.allowDangerouslySkipPermissions, true);
+      assert.equal(createInput?.options.permissionMode, undefined);
+      assert.equal(createInput?.options.allowDangerouslySkipPermissions, undefined);
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),
@@ -2540,8 +2540,8 @@ describe("ClaudeAdapterLive", () => {
         attachments: [],
       });
 
-      // First call sets "plan", second call restores "bypassPermissions" (the base for full-access)
-      assert.deepEqual(harness.query.setPermissionModeCalls, ["plan", "bypassPermissions"]);
+      // First call sets plan mode, second call restores the normal default mode.
+      assert.deepEqual(harness.query.setPermissionModeCalls, ["plan", "default"]);
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),
@@ -2837,7 +2837,7 @@ describe("ClaudeAdapterLive", () => {
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
 
-      // In full-access mode, regular tools are auto-approved.
+      // In full-access mode, AskUserQuestion still goes through the user-input flow.
       // AskUserQuestion should still go through the user-input flow.
       const session = yield* adapter.startSession({
         threadId: THREAD_ID,

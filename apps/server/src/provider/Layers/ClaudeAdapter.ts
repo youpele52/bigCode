@@ -176,8 +176,7 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       });
     } else if (input.interactionMode === "default") {
       yield* Effect.tryPromise({
-        try: () =>
-          context.query.setPermissionMode(context.basePermissionMode ?? "bypassPermissions"),
+        try: () => context.query.setPermissionMode(context.basePermissionMode ?? "default"),
         catch: (cause) => toRequestError(input.threadId, "turn/setPermissionMode", cause),
       });
     }

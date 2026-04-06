@@ -258,6 +258,34 @@ it.effect("decodes thread.created runtime mode for historical events", () =>
   }),
 );
 
+it.effect("decodes thread.created parent thread metadata when present", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeThreadCreatedPayload({
+      threadId: "thread-2",
+      projectId: "project-1",
+      title: "Thread title",
+      modelSelection: {
+        provider: "codex",
+        model: "gpt-5.4",
+      },
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      parentThread: {
+        threadId: "thread-1",
+        title: "Parent thread",
+      },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    assert.deepStrictEqual(parsed.parentThread, {
+      threadId: "thread-1",
+      title: "Parent thread",
+    });
+  }),
+);
+
 it.effect("decodes thread.meta-updated payloads with explicit provider", () =>
   Effect.gen(function* () {
     const parsed = yield* decodeThreadMetaUpdatedPayload({
@@ -404,6 +432,25 @@ it.effect("accepts a source proposed plan reference in thread.turn.start", () =>
   }),
 );
 
+it.effect("accepts a bootstrap source thread id in thread.turn.start", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeThreadTurnStartCommand({
+      type: "thread.turn.start",
+      commandId: "cmd-turn-bootstrap-source",
+      threadId: "thread-2",
+      message: {
+        messageId: "msg-bootstrap-source",
+        role: "user",
+        text: "continue",
+        attachments: [],
+      },
+      bootstrapSourceThreadId: "thread-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    assert.strictEqual(parsed.bootstrapSourceThreadId, "thread-1");
+  }),
+);
+
 it.effect(
   "decodes thread.turn-start-requested defaults for provider, runtime mode, and interaction mode",
   () =>
@@ -435,6 +482,18 @@ it.effect("decodes thread.turn-start-requested source proposed plan metadata whe
       threadId: "thread-1",
       planId: "plan-1",
     });
+  }),
+);
+
+it.effect("decodes thread.turn-start-requested bootstrap source thread id when present", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeThreadTurnStartRequestedPayload({
+      threadId: "thread-2",
+      messageId: "msg-2",
+      bootstrapSourceThreadId: "thread-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    assert.strictEqual(parsed.bootstrapSourceThreadId, "thread-1");
   }),
 );
 

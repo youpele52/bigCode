@@ -26,6 +26,8 @@ import { OrchestrationSession } from "./orchestration.thread";
 import {
   OrchestrationCheckpointFile,
   OrchestrationCheckpointStatus,
+  OrchestrationMessage,
+  ParentThreadReference,
   OrchestrationProposedPlan,
   OrchestrationThreadActivity,
   SourceProposedPlanReference,
@@ -70,6 +72,8 @@ const ThreadCreateCommand = Schema.Struct({
   ),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  parentThread: Schema.optional(ParentThreadReference),
+  seedMessages: Schema.optional(Schema.Array(OrchestrationMessage)),
   createdAt: IsoDateTime,
 });
 
@@ -159,6 +163,7 @@ export const ThreadTurnStartCommand = Schema.Struct({
     Schema.withDecodingDefault(() => DEFAULT_PROVIDER_INTERACTION_MODE),
   ),
   bootstrap: Schema.optional(ThreadTurnStartBootstrap),
+  bootstrapSourceThreadId: Schema.optional(ThreadId),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
   createdAt: IsoDateTime,
 });
@@ -178,6 +183,7 @@ const ClientThreadTurnStartCommand = Schema.Struct({
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
   bootstrap: Schema.optional(ThreadTurnStartBootstrap),
+  bootstrapSourceThreadId: Schema.optional(ThreadId),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
   createdAt: IsoDateTime,
 });

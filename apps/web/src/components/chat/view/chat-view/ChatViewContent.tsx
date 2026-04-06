@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 
 import { isElectron } from "~/config/env";
@@ -120,6 +121,21 @@ export function ChatViewContent({
               onTouchEnd={runtime.scrollBehavior.onMessagesTouchEnd}
               onTouchCancel={runtime.scrollBehavior.onMessagesTouchEnd}
             >
+              {base.activeThread?.parentThread ? (
+                <div className="mb-4 flex items-center gap-3">
+                  <span className="h-px flex-1 bg-border" />
+                  <Link
+                    to="/$threadId"
+                    params={{
+                      threadId: base.activeThread.parentThread.threadId,
+                    }}
+                    className="rounded-full border border-border bg-background px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/80 outline-hidden transition-colors hover:border-foreground/20 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    Branched from {base.activeThread.parentThread.title}
+                  </Link>
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+              ) : null}
               <MessagesTimeline
                 key={base.activeThread!.id}
                 hasMessages={timeline.timelineEntries.length > 0}
@@ -156,8 +172,8 @@ export function ChatViewContent({
             {thread.isWorking ? (
               <div className="pointer-events-none absolute bottom-1 left-0 right-0 flex justify-center px-5">
                 <div className="mx-auto w-full max-w-3xl px-1 py-0.5">
-                  <div className="flex items-center gap-2 pt-1 text-[11px] text-muted-foreground/70">
-                    <span>{thread.workingVerb}</span>
+                  <div className="flex items-center gap-2 pt-1 text-[11px] text-muted-foreground/70 px-7 ">
+                    <span className="">{thread.workingVerb}</span>
                     <span className="inline-flex items-center gap-[3px]">
                       <span className="h-1 w-1 animate-pulse rounded-full bg-muted-foreground/30" />
                       <span className="h-1 w-1 animate-pulse rounded-full bg-muted-foreground/30 [animation-delay:200ms]" />
@@ -165,7 +181,7 @@ export function ChatViewContent({
                     </span>
                     <span className="flex-1" />
                     {thread.activeWorkStartedAt ? (
-                      <span>
+                      <span className="">
                         {formatWorkingTimer(thread.activeWorkStartedAt, thread.nowIso) ?? "0s"}
                       </span>
                     ) : null}
@@ -197,7 +213,9 @@ export function ChatViewContent({
               envLocked={runtime.envLocked}
               onComposerFocusRequest={runtime.scheduleComposerFocus}
               {...(base.canCheckoutPullRequestIntoThread
-                ? { onCheckoutPullRequestRequest: runtime.openPullRequestDialog }
+                ? {
+                    onCheckoutPullRequestRequest: runtime.openPullRequestDialog,
+                  }
                 : {})}
             />
           ) : null}

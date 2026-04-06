@@ -32,6 +32,9 @@ export function makeThreadsProjector(
           interactionMode: event.payload.interactionMode,
           branch: event.payload.branch,
           worktreePath: event.payload.worktreePath,
+          ...(event.payload.parentThread !== undefined
+            ? { parentThread: event.payload.parentThread }
+            : {}),
           latestTurnId: null,
           createdAt: event.payload.createdAt,
           updatedAt: event.payload.updatedAt,

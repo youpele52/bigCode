@@ -55,6 +55,12 @@ export const SourceProposedPlanReference = Schema.Struct({
 });
 export type SourceProposedPlanReference = typeof SourceProposedPlanReference.Type;
 
+export const ParentThreadReference = Schema.Struct({
+  threadId: ThreadId,
+  title: TrimmedNonEmptyString,
+});
+export type ParentThreadReference = typeof ParentThreadReference.Type;
+
 export const OrchestrationSessionStatus = Schema.Literals([
   "idle",
   "starting",
@@ -154,6 +160,7 @@ export const OrchestrationThread = Schema.Struct({
   updatedAt: IsoDateTime,
   archivedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(() => null)),
   deletedAt: Schema.NullOr(IsoDateTime),
+  parentThread: Schema.optional(ParentThreadReference),
   messages: Schema.Array(OrchestrationMessage),
   proposedPlans: Schema.Array(OrchestrationProposedPlan).pipe(Schema.withDecodingDefault(() => [])),
   activities: Schema.Array(OrchestrationThreadActivity),

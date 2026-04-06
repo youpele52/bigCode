@@ -10,6 +10,7 @@
  * @module OpencodeAdapter.session
  */
 import {
+  ApprovalRequestId,
   ThreadId,
   type ProviderRuntimeEvent,
   type ProviderSendTurnInput,
@@ -29,6 +30,7 @@ import type { EventNdjsonLogger } from "./EventNdjsonLogger.ts";
 import type { ActiveOpencodeSession } from "./OpencodeAdapter.types.ts";
 import { PROVIDER } from "./OpencodeAdapter.types.ts";
 import {
+  FULL_ACCESS_AUTO_APPROVE_AFTER_MS,
   makeHandleEvent,
   makeSyntheticEventFn,
   startEventStream,
@@ -87,9 +89,6 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
     Queue.offerAll(runtimeEventQueue, events).pipe(Effect.asVoid);
 
   const syntheticEventFn = makeSyntheticEventFn(nextEventId, makeEventStamp);
-
-  const handleEventFn = makeHandleEvent(nextEventId, makeEventStamp, nativeEventLogger, emitFn);
-
   const requireSession = (
     threadId: ThreadId,
   ): Effect.Effect<ActiveOpencodeSession, ProviderAdapterSessionNotFoundError> => {
@@ -105,6 +104,44 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
     syntheticEventFn,
     emitFn,
   };
+
+  const turnMethods = makeTurnMethods(sharedDeps);
+
+  const autoApprovePendingPermission = (session: ActiveOpencodeSession, requestId: string) =>
+    Effect.gen(function* () {
+      yield* Effect.sleep(FULL_ACCESS_AUTO_APPROVE_AFTER_MS);
+      const pending = session.pendingPermissions.get(requestId);
+      if (!pending || pending.responding) {
+        return;
+      }
+      yield* turnMethods.respondToRequest(
+        session.threadId,
+        ApprovalRequestId.makeUnsafe(requestId),
+        "accept",
+      );
+    });
+
+  const scheduleAutoApprovePendingPermission = (
+    session: ActiveOpencodeSession,
+    requestId: string,
+  ): void => {
+    void autoApprovePendingPermission(session, requestId)
+      .pipe(Effect.runPromiseWith(services))
+      .catch((error) => {
+        console.error(
+          `[opencode-adapter] failed to auto-approve permission request '${requestId}' for thread=${session.threadId} session=${session.opencodeSessionId}:`,
+          error,
+        );
+      });
+  };
+
+  const handleEventFn = makeHandleEvent(
+    nextEventId,
+    makeEventStamp,
+    nativeEventLogger,
+    emitFn,
+    scheduleAutoApprovePendingPermission,
+  );
 
   // ── startSession ──────────────────────────────────────────────────
 
@@ -248,7 +285,6 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
 
   // ── Compose all methods ───────────────────────────────────────────
 
-  const turnMethods = makeTurnMethods(sharedDeps);
   const queryMethods = makeQueryMethods(sharedDeps);
 
   return {

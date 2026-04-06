@@ -70,6 +70,8 @@ export interface UseOnSendInput {
   addComposerImagesToDraft: (images: ComposerImageAttachment[]) => void;
   addComposerTerminalContextsToDraft: (contexts: TerminalContextDraft[]) => void;
   clearComposerDraftContent: (threadId: ThreadId) => void;
+  bootstrapSourceThreadId: ThreadId | null;
+  clearBootstrapSourceThreadId: (threadId: ThreadId) => void;
   beginLocalDispatch: (opts: { preparingWorktree: boolean }) => void;
   resetLocalDispatch: () => void;
   forceStickToBottom: () => void;
@@ -121,6 +123,7 @@ export function useOnSend(input: UseOnSendInput) {
       showPlanFollowUpPrompt: planFollowUp,
       activeProposedPlan: proposedPlan,
       activePendingProgress: pendingProgress,
+      bootstrapSourceThreadId,
       shouldAutoScrollRef: autoScrollRef,
     } = inputRef.current;
 
@@ -353,8 +356,12 @@ export function useOnSend(input: UseOnSendInput) {
         runtimeMode: runMode,
         interactionMode: interactMode,
         ...(bootstrap ? { bootstrap } : {}),
+        ...(bootstrapSourceThreadId ? { bootstrapSourceThreadId } : {}),
         createdAt: messageCreatedAt,
       });
+      if (bootstrapSourceThreadId) {
+        inputRef.current.clearBootstrapSourceThreadId(threadIdForSend);
+      }
       turnStartSucceeded = true;
     })().catch(async (err: unknown) => {
       const { revokeUserMessagePreviewUrls } = await import("./ChatView.logic");

@@ -9,7 +9,6 @@ import type {
 } from "@t3tools/contracts";
 import { Effect } from "effect";
 
-import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import {
   requireProject,
   requireThread,
@@ -17,6 +16,7 @@ import {
   requireThreadAbsent,
   requireThreadNotArchived,
 } from "./commandInvariants.ts";
+import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import { nowIso, withEventBase } from "./deciderHelpers.ts";
 
 export type ThreadLifecycleCommand = Extract<
@@ -55,7 +55,20 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
         command,
         threadId: command.threadId,
       });
-      return {
+      if (command.parentThread !== undefined) {
+        const parentThread = yield* requireThread({
+          readModel,
+          command,
+          threadId: command.parentThread.threadId,
+        });
+        if (parentThread.projectId !== command.projectId) {
+          return yield* new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: `Parent thread '${command.parentThread.threadId}' must belong to project '${command.projectId}'.`,
+          });
+        }
+      }
+      const createdEvent: Omit<OrchestrationEvent, "sequence"> = {
         ...withEventBase({
           aggregateKind: "thread",
           aggregateId: command.threadId,
@@ -72,10 +85,39 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
           interactionMode: command.interactionMode,
           branch: command.branch,
           worktreePath: command.worktreePath,
+          ...(command.parentThread !== undefined ? { parentThread: command.parentThread } : {}),
           createdAt: command.createdAt,
           updatedAt: command.createdAt,
         },
       };
+      if (!command.seedMessages || command.seedMessages.length === 0) {
+        return createdEvent;
+      }
+      return [
+        createdEvent,
+        ...command.seedMessages.map(
+          (message): Omit<OrchestrationEvent, "sequence"> => ({
+            ...withEventBase({
+              aggregateKind: "thread",
+              aggregateId: command.threadId,
+              occurredAt: message.updatedAt,
+              commandId: command.commandId,
+            }),
+            type: "thread.message-sent" as const,
+            payload: {
+              threadId: command.threadId,
+              messageId: message.id,
+              role: message.role,
+              text: message.text,
+              ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
+              turnId: message.turnId,
+              streaming: message.streaming,
+              createdAt: message.createdAt,
+              updatedAt: message.updatedAt,
+            },
+          }),
+        ),
+      ];
     }
 
     case "thread.delete": {
