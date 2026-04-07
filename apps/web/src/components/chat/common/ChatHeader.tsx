@@ -69,6 +69,8 @@ export const ChatHeader = memo(function ChatHeader({
 
   return (
     <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2">
+      {/* Sidebar width spacer when closed to maintain layout balance */}
+      {!open && <div className="hidden h-0 w-[calc(3rem+1rem)] shrink-0 md:block" />}
       <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-2 overflow-hidden sm:gap-3">
         <h2
           className="min-w-0 shrink truncate text-sm font-medium text-foreground"
