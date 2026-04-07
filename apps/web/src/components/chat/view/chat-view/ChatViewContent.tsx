@@ -87,6 +87,7 @@ export function ChatViewContent({
           terminalOpen={base.terminalState.terminalOpen}
           terminalToggleShortcutLabel={composer.terminalToggleShortcutLabel}
           diffToggleShortcutLabel={composer.diffPanelShortcutLabel}
+          sidebarToggleShortcutLabel={composer.sidebarToggleShortcutLabel}
           gitCwd={composer.gitCwd}
           diffOpen={base.diffOpen}
           onRunProjectScript={(script) => {

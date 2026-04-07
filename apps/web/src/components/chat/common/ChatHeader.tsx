@@ -31,6 +31,7 @@ interface ChatHeaderProps {
   terminalOpen: boolean;
   terminalToggleShortcutLabel: string | null;
   diffToggleShortcutLabel: string | null;
+  sidebarToggleShortcutLabel: string | null;
   gitCwd: string | null;
   diffOpen: boolean;
   onRunProjectScript: (script: ProjectScript) => void;
@@ -55,6 +56,7 @@ export const ChatHeader = memo(function ChatHeader({
   terminalOpen,
   terminalToggleShortcutLabel,
   diffToggleShortcutLabel,
+  sidebarToggleShortcutLabel,
   gitCwd,
   diffOpen,
   onRunProjectScript,
@@ -145,7 +147,10 @@ export const ChatHeader = memo(function ChatHeader({
               </Toggle>
             }
           />
-          <TooltipPopup side="bottom">{open ? "Hide sidebar" : "Show sidebar"}</TooltipPopup>
+          <TooltipPopup side="bottom">
+            {open ? "Hide sidebar" : "Show sidebar"}
+            {sidebarToggleShortcutLabel && <> ({sidebarToggleShortcutLabel})</>}
+          </TooltipPopup>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger

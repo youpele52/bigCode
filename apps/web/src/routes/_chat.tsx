@@ -8,6 +8,7 @@ import { selectThreadTerminalState } from "../stores/terminal";
 import { useTerminalStateStore } from "../stores/terminal";
 import { useThreadSelectionStore } from "../stores/thread";
 import { resolveSidebarNewThreadEnvMode } from "~/components/sidebar/Sidebar.logic";
+import { useSidebar } from "~/components/ui/sidebar";
 import { useSettings } from "~/hooks/useSettings";
 import { useServerKeybindings } from "~/rpc/serverState";
 
@@ -23,6 +24,7 @@ function ChatRouteGlobalShortcuts() {
       : false,
   );
   const appSettings = useSettings();
+  const { toggleSidebar } = useSidebar();
 
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
@@ -34,15 +36,22 @@ function ChatRouteGlobalShortcuts() {
         return;
       }
 
-      const projectId = activeThread?.projectId ?? activeDraftThread?.projectId ?? defaultProjectId;
-      if (!projectId) return;
-
       const command = resolveShortcutCommand(event, keybindings, {
         context: {
           terminalFocus: isTerminalFocused(),
           terminalOpen,
         },
       });
+
+      if (command === "sidebar.toggle") {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleSidebar();
+        return;
+      }
+
+      const projectId = activeThread?.projectId ?? activeDraftThread?.projectId ?? defaultProjectId;
+      if (!projectId) return;
 
       if (command === "chat.newLocal") {
         event.preventDefault();
@@ -82,6 +91,7 @@ function ChatRouteGlobalShortcuts() {
     selectedThreadIdsSize,
     terminalOpen,
     appSettings.defaultThreadEnvMode,
+    toggleSidebar,
   ]);
 
   return null;
