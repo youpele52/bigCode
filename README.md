@@ -1,6 +1,6 @@
-# T3 Code
+# bigCode
 
-T3 Code is a minimal web GUI for coding agents.
+bigCode is a minimal web GUI for coding agents.
 
 ## Supported Providers
 
@@ -14,6 +14,7 @@ T3 Code is a minimal web GUI for coding agents.
 ### Prerequisites
 
 Install and authenticate at least one provider:
+
 - **Codex**: install [Codex CLI](https://github.com/openai/codex) and run `codex login`
 - **Claude**: install Claude Code and run `claude auth login`
 - **Copilot**: authenticate via GitHub CLI or VS Code

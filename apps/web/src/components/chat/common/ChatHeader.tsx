@@ -3,7 +3,7 @@ import type {
   ProjectScript,
   ResolvedKeybindingsConfig,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@bigcode/contracts";
 import { memo } from "react";
 import GitActionsControl from "../../git/GitActionsControl";
 import { DiffIcon, PanelLeftCloseIcon, PanelLeftIcon, TerminalSquareIcon } from "lucide-react";
