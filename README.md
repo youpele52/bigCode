@@ -23,8 +23,8 @@ Install and authenticate at least one provider:
 ### From Source
 
 ```bash
-git clone https://github.com/pingdotgg/t3code.git
-cd t3code
+git clone https://github.com/youpele52/bigCode.git
+cd bigCode
 bun install
 bun dev
 ```
