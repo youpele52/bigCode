@@ -366,7 +366,13 @@ export function $setComposerEditorPrompt(
   const segments = splitPromptIntoComposerSegments(prompt, terminalContexts);
   for (const segment of segments) {
     if (segment.type === "mention") {
-      paragraph.append($createComposerMentionNode(segment.path));
+      paragraph.append(
+        $createComposerMentionNode({
+          rawValue: segment.rawValue,
+          displayLabel: segment.displayLabel,
+          mentionKind: segment.mentionKind,
+        }),
+      );
       continue;
     }
     if (segment.type === "terminal-context") {

@@ -2,7 +2,7 @@ import { Effect, Ref, Stream } from "effect";
 import {
   KeybindingsConfigError,
   type OrchestrationEvent,
-  type ServerConfigStreamEvent,
+  type ServerDiscoveryCatalog,
   type ServerProvider,
   type ServerSettings,
   ServerSettingsError,
@@ -84,6 +84,9 @@ export function makeServerConfigUpdateStream(input: {
   readonly providerRegistry: {
     streamChanges: Stream.Stream<ReadonlyArray<ServerProvider>>;
   };
+  readonly discoveryRegistry: {
+    streamChanges: Stream.Stream<ServerDiscoveryCatalog>;
+  };
   readonly serverSettings: {
     streamChanges: Stream.Stream<ServerSettings>;
   };
@@ -110,6 +113,13 @@ export function makeServerConfigUpdateStream(input: {
         payload: { settings },
       })),
     );
+    const discoveryUpdates = input.discoveryRegistry.streamChanges.pipe(
+      Stream.map((discovery) => ({
+        version: 1 as const,
+        type: "discoveryUpdated" as const,
+        payload: { discovery },
+      })),
+    );
 
     return Stream.concat(
       Stream.make({
@@ -117,7 +127,10 @@ export function makeServerConfigUpdateStream(input: {
         type: "snapshot" as const,
         config: yield* input.loadServerConfig,
       }),
-      Stream.merge(keybindingsUpdates, Stream.merge(providerStatuses, settingsUpdates)),
+      Stream.merge(
+        keybindingsUpdates,
+        Stream.merge(providerStatuses, Stream.merge(settingsUpdates, discoveryUpdates)),
+      ),
     );
   });
 }

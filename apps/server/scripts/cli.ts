@@ -10,10 +10,12 @@ import {
   DEVELOPMENT_ICON_OVERRIDES,
   PUBLISH_ICON_OVERRIDES,
 } from "../../../scripts/lib/brand-assets.ts";
-import { APP_SERVER_NAME } from "@bigcode/contracts";
 import { resolveCatalogDependencies } from "../../../scripts/lib/resolve-catalog.ts";
 import rootPackageJson from "../../../package.json" with { type: "json" };
 import serverPackageJson from "../package.json" with { type: "json" };
+
+// Keep the Node-run build CLI independent from the contracts source barrel.
+const APP_SERVER_NAME = "bigCode server";
 
 class CliError extends Data.TaggedError("CliError")<{
   readonly message: string;

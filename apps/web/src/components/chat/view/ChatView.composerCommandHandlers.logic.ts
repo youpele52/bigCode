@@ -163,6 +163,42 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
         if (applied) setComposerHighlightedItemId(null);
         return;
       }
+      if (item.type === "agent") {
+        const replacement = `@agent::${item.agent.name} `;
+        const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
+          snapshot.value,
+          trigger.rangeEnd,
+          replacement,
+        );
+        const applied = applyPromptReplacement(
+          trigger.rangeStart,
+          replacementRangeEnd,
+          replacement,
+          {
+            expectedText: snapshot.value.slice(trigger.rangeStart, replacementRangeEnd),
+          },
+        );
+        if (applied) setComposerHighlightedItemId(null);
+        return;
+      }
+      if (item.type === "skill") {
+        const replacement = `@skill::${item.skill.name} `;
+        const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
+          snapshot.value,
+          trigger.rangeEnd,
+          replacement,
+        );
+        const applied = applyPromptReplacement(
+          trigger.rangeStart,
+          replacementRangeEnd,
+          replacement,
+          {
+            expectedText: snapshot.value.slice(trigger.rangeStart, replacementRangeEnd),
+          },
+        );
+        if (applied) setComposerHighlightedItemId(null);
+        return;
+      }
       if (item.type === "slash-command") {
         if (item.command === "model") {
           const replacement = "/model ";
@@ -176,6 +212,24 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
             replacementRangeEnd,
             replacement,
             { expectedText: snapshot.value.slice(trigger.rangeStart, replacementRangeEnd) },
+          );
+          if (applied) setComposerHighlightedItemId(null);
+          return;
+        }
+        if (item.command === "agents" || item.command === "skills") {
+          const replacement = `/${item.command} `;
+          const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
+            snapshot.value,
+            trigger.rangeEnd,
+            replacement,
+          );
+          const applied = applyPromptReplacement(
+            trigger.rangeStart,
+            replacementRangeEnd,
+            replacement,
+            {
+              expectedText: snapshot.value.slice(trigger.rangeStart, replacementRangeEnd),
+            },
           );
           if (applied) setComposerHighlightedItemId(null);
           return;

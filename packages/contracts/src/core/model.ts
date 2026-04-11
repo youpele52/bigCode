@@ -1,6 +1,5 @@
 import { Schema } from "effect";
 import { TrimmedNonEmptyString } from "./baseSchemas";
-import type { ProviderKind } from "../orchestration/orchestration";
 import {
   CODEX_REASONING_EFFORT_OPTIONS,
   CLAUDE_CODE_EFFORT_OPTIONS,

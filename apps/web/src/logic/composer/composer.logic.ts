@@ -2,7 +2,7 @@ import { splitPromptIntoComposerSegments } from "./editor-mentions.logic";
 import { INLINE_TERMINAL_CONTEXT_PLACEHOLDER } from "../../lib/terminalContext";
 
 export type ComposerTriggerKind = "path" | "slash-command" | "slash-model";
-export type ComposerSlashCommand = "model" | "plan" | "default";
+export type ComposerSlashCommand = "model" | "plan" | "default" | "agents" | "skills";
 
 export interface ComposerTrigger {
   kind: ComposerTriggerKind;
@@ -11,10 +11,20 @@ export interface ComposerTrigger {
   rangeEnd: number;
 }
 
-const SLASH_COMMANDS: readonly ComposerSlashCommand[] = ["model", "plan", "default"];
+const SLASH_COMMANDS: readonly ComposerSlashCommand[] = [
+  "model",
+  "plan",
+  "default",
+  "agents",
+  "skills",
+];
 const isInlineTokenSegment = (
   segment: { type: "text"; text: string } | { type: "mention" } | { type: "terminal-context" },
 ): boolean => segment.type !== "text";
+
+function expandedMentionLength(segment: { type: "mention"; rawValue: string }): number {
+  return segment.rawValue.length + 1;
+}
 
 function clampCursor(text: string, cursor: number): number {
   if (!Number.isFinite(cursor)) return text.length;
@@ -51,7 +61,7 @@ export function expandCollapsedComposerCursor(text: string, cursorInput: number)
 
   for (const segment of segments) {
     if (segment.type === "mention") {
-      const expandedLength = segment.path.length + 1;
+      const expandedLength = expandedMentionLength(segment);
       if (remaining <= 1) {
         return expandedCursor + (remaining === 0 ? 0 : expandedLength);
       }
@@ -123,7 +133,7 @@ export function collapseExpandedComposerCursor(text: string, cursorInput: number
 
   for (const segment of segments) {
     if (segment.type === "mention") {
-      const expandedLength = segment.path.length + 1;
+      const expandedLength = expandedMentionLength(segment);
       if (remaining === 0) {
         return collapsedCursor;
       }
@@ -220,6 +230,20 @@ export function detectComposerTrigger(text: string, cursorInput: number): Compos
         rangeStart: lineStart,
         rangeEnd: cursor,
       };
+    }
+
+    const discoveryMatch = /^\/(agents|skills)(?:\s+(.*))?$/.exec(linePrefix);
+    if (discoveryMatch) {
+      const command = discoveryMatch[1]?.toLowerCase();
+      if (command === "agents" || command === "skills") {
+        const query = (discoveryMatch[2] ?? "").trim();
+        return {
+          kind: "slash-command",
+          query: query.length > 0 ? `${command} ${query}` : `${command} `,
+          rangeStart: lineStart,
+          rangeEnd: cursor,
+        };
+      }
     }
   }
 

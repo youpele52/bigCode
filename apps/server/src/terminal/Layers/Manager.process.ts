@@ -1,6 +1,6 @@
 import { type TerminalEvent } from "@bigcode/contracts";
 import { makeKeyedCoalescingWorker } from "@bigcode/shared/KeyedCoalescingWorker";
-import { Effect, Exit, Fiber, FileSystem, Option, Scope, Semaphore, SynchronizedRef } from "effect";
+import { Effect, Exit, FileSystem, Option, Scope, Semaphore, SynchronizedRef } from "effect";
 
 import { TerminalCwdError, TerminalSessionLookupError } from "../Services/Manager";
 import { type PtyProcess } from "../Services/PTY";
@@ -41,6 +41,35 @@ import {
 
 // Re-export for external consumers (tests import this directly)
 export type { TerminalManagerOptions };
+
+const startKillEscalation = Effect.fn("terminal.startKillEscalation")(function* (input: {
+  readonly lifecycleCtx: Pick<ProcessLifecycleContext, "modifyManagerState">;
+  readonly processKillGraceMs: number;
+  readonly workerScope: Scope.Closeable;
+  readonly proc: PtyProcess;
+  readonly threadId: string;
+  readonly terminalId: string;
+}) {
+  const fiber = yield* runKillEscalationWith(
+    input.processKillGraceMs,
+    input.proc,
+    input.threadId,
+    input.terminalId,
+  ).pipe(
+    Effect.ensuring(
+      input.lifecycleCtx.modifyManagerState((state) => {
+        if (!state.killFibers.has(input.proc)) {
+          return [undefined, state] as const;
+        }
+        const killFibers = new Map(state.killFibers);
+        killFibers.delete(input.proc);
+        return [undefined, { ...state, killFibers }] as const;
+      }),
+    ),
+    Effect.forkIn(input.workerScope),
+  );
+  yield* registerKillFiberWith(input.lifecycleCtx.modifyManagerState, input.proc, fiber);
+});
 
 // ---------------------------------------------------------------------------
 // Main factory
@@ -298,35 +327,24 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
     const clearKillFiber = (proc: PtyProcess | null) =>
       clearKillFiberWith(lifecycleCtx.modifyManagerState, proc);
 
-    const registerKillFiber = (proc: PtyProcess, fiber: Fiber.Fiber<void, never>) =>
-      registerKillFiberWith(lifecycleCtx.modifyManagerState, proc, fiber);
-
-    const runKillEscalation = (proc: PtyProcess, threadId: string, terminalId: string) =>
-      runKillEscalationWith(processKillGraceMs, proc, threadId, terminalId);
-
-    const startKillEscalation = (proc: PtyProcess, threadId: string, terminalId: string) =>
-      Effect.gen(function* () {
-        const fiber = yield* runKillEscalation(proc, threadId, terminalId).pipe(
-          Effect.ensuring(
-            modifyManagerState((state) => {
-              if (!state.killFibers.has(proc)) {
-                return [undefined, state] as const;
-              }
-              const killFibers = new Map(state.killFibers);
-              killFibers.delete(proc);
-              return [undefined, { ...state, killFibers }] as const;
-            }),
-          ),
-          Effect.forkIn(workerScope),
-        );
-        yield* registerKillFiber(proc, fiber);
-      }).pipe(Effect.withSpan("terminal.startKillEscalation"));
-
     const drainProcessEvents = (session: TerminalSessionState, expectedPid: number) =>
       drainProcessEventsWith(lifecycleCtx, clearKillFiber, session, expectedPid);
 
     const stopProcess = (session: TerminalSessionState) =>
-      stopProcessWith(lifecycleCtx, clearKillFiber, startKillEscalation, session);
+      stopProcessWith(
+        lifecycleCtx,
+        clearKillFiber,
+        (proc, threadId, terminalId) =>
+          startKillEscalation({
+            lifecycleCtx,
+            processKillGraceMs,
+            workerScope,
+            proc,
+            threadId,
+            terminalId,
+          }),
+        session,
+      );
 
     const startSession = (
       session: TerminalSessionState,
@@ -336,7 +354,15 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       startSessionWith(
         lifecycleCtx,
         stopProcess,
-        startKillEscalation,
+        (proc, threadId, terminalId) =>
+          startKillEscalation({
+            lifecycleCtx,
+            processKillGraceMs,
+            workerScope,
+            proc,
+            threadId,
+            terminalId,
+          }),
         drainProcessEvents,
         snapshot,
         session,
@@ -380,7 +406,12 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
           cleanupProcessHandles(session);
           if (!session.process) return;
           yield* clearKillFiber(session.process);
-          yield* runKillEscalation(session.process, session.threadId, session.terminalId);
+          yield* runKillEscalationWith(
+            processKillGraceMs,
+            session.process,
+            session.threadId,
+            session.terminalId,
+          );
         });
 
         yield* Effect.forEach(sessions, cleanupSession, {

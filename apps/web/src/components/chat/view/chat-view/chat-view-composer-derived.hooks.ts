@@ -11,6 +11,8 @@ import { projectScriptCwd } from "@bigcode/shared/projectScripts";
 import {
   useServerAvailableEditors,
   useServerConfig,
+  useServerDiscoveredAgents,
+  useServerDiscoveredSkills,
   useServerKeybindings,
 } from "~/rpc/serverState";
 import { basenameOfPath } from "../../../../lib/vscode-icons";
@@ -28,7 +30,12 @@ import { COMPOSER_PATH_QUERY_DEBOUNCE_MS } from "../ChatView.constants.logic";
 import { type ComposerCommandItem } from "../../composer/ComposerCommandMenu";
 import { threadHasStarted } from "../ChatView.logic";
 
-import { EMPTY_PROJECT_ENTRIES, EMPTY_PROVIDERS } from "./shared";
+import {
+  EMPTY_DISCOVERED_AGENTS,
+  EMPTY_DISCOVERED_SKILLS,
+  EMPTY_PROJECT_ENTRIES,
+  EMPTY_PROVIDERS,
+} from "./shared";
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
 
 export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
@@ -133,6 +140,8 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
   const gitStatusQuery = useQuery(gitStatusQueryOptions(gitCwd));
   const keybindings = useServerKeybindings();
   const availableEditors = useServerAvailableEditors();
+  const discoveredAgents = useServerDiscoveredAgents() ?? EMPTY_DISCOVERED_AGENTS;
+  const discoveredSkills = useServerDiscoveredSkills() ?? EMPTY_DISCOVERED_SKILLS;
   const modelOptionsByProvider = useMemo(
     () => ({
       codex: providerStatuses.find((provider) => provider.provider === "codex")?.models ?? [],
@@ -190,14 +199,32 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
   const composerMenuItems = useMemo<ComposerCommandItem[]>(() => {
     if (!base.composerTrigger) return [];
     if (base.composerTrigger.kind === "path") {
-      return workspaceEntries.map((entry) => ({
+      const query = base.composerTrigger.query.trim().toLowerCase();
+      const agentItems = discoveredAgents
+        .filter((agent) => {
+          if (!query) return true;
+          return (
+            agent.name.toLowerCase().includes(query) ||
+            agent.provider.toLowerCase().includes(query) ||
+            (agent.description?.toLowerCase().includes(query) ?? false)
+          );
+        })
+        .map((agent) => ({
+          id: `agent:${agent.provider}:${agent.id}`,
+          type: "agent",
+          agent,
+          label: `@${agent.name}`,
+          description: `${agent.provider}${agent.description ? ` · ${agent.description}` : ""}`,
+        })) satisfies ReadonlyArray<Extract<ComposerCommandItem, { type: "agent" }>>;
+      const pathItems = workspaceEntries.map((entry) => ({
         id: `path:${entry.kind}:${entry.path}`,
         type: "path",
         path: entry.path,
         pathKind: entry.kind,
         label: basenameOfPath(entry.path),
         description: entry.parentPath ?? "",
-      }));
+      })) satisfies ReadonlyArray<Extract<ComposerCommandItem, { type: "path" }>>;
+      return [...agentItems, ...pathItems];
     }
 
     if (base.composerTrigger.kind === "slash-command") {
@@ -223,10 +250,70 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
           label: "/default",
           description: "Switch this thread back to normal build mode",
         },
+        {
+          id: "slash:agents",
+          type: "slash-command",
+          command: "agents",
+          label: "/agents",
+          description: "Browse discovered agents across providers",
+        },
+        {
+          id: "slash:skills",
+          type: "slash-command",
+          command: "skills",
+          label: "/skills",
+          description: "Browse discovered skills across providers",
+        },
       ] satisfies ReadonlyArray<Extract<ComposerCommandItem, { type: "slash-command" }>>;
       const query = base.composerTrigger.query.trim().toLowerCase();
+      const skillItems = discoveredSkills
+        .filter((skill) => {
+          if (!(query === "skills" || query.startsWith("skills "))) {
+            return false;
+          }
+          const skillQuery = query.replace(/^skills\s*/, "");
+          if (!skillQuery) return true;
+          return (
+            skill.name.toLowerCase().includes(skillQuery) ||
+            skill.provider.toLowerCase().includes(skillQuery) ||
+            (skill.description?.toLowerCase().includes(skillQuery) ?? false)
+          );
+        })
+        .map((skill) => ({
+          id: `skill:${skill.provider}:${skill.id}`,
+          type: "skill",
+          skill,
+          label: skill.name,
+          description: `${skill.provider}${skill.description ? ` · ${skill.description}` : ""}`,
+        })) satisfies ReadonlyArray<Extract<ComposerCommandItem, { type: "skill" }>>;
+      const agentItems = discoveredAgents
+        .filter((agent) => {
+          if (!(query === "agents" || query.startsWith("agents "))) {
+            return false;
+          }
+          const agentQuery = query.replace(/^agents\s*/, "");
+          if (!agentQuery) return true;
+          return (
+            agent.name.toLowerCase().includes(agentQuery) ||
+            agent.provider.toLowerCase().includes(agentQuery) ||
+            (agent.description?.toLowerCase().includes(agentQuery) ?? false)
+          );
+        })
+        .map((agent) => ({
+          id: `slash-agent:${agent.provider}:${agent.id}`,
+          type: "agent",
+          agent,
+          label: agent.name,
+          description: `${agent.provider}${agent.description ? ` · ${agent.description}` : ""}`,
+        })) satisfies ReadonlyArray<Extract<ComposerCommandItem, { type: "agent" }>>;
       if (!query) {
         return [...slashCommandItems];
+      }
+      if (query === "agents" || query.startsWith("agents ")) {
+        return [...agentItems];
+      }
+      if (query === "skills" || query.startsWith("skills ")) {
+        return [...skillItems];
       }
       return slashCommandItems.filter(
         (item) => item.command.includes(query) || item.label.slice(1).includes(query),
@@ -256,7 +343,13 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
         }
         return item;
       });
-  }, [base.composerTrigger, searchableModelOptions, workspaceEntries]);
+  }, [
+    base.composerTrigger,
+    discoveredAgents,
+    discoveredSkills,
+    searchableModelOptions,
+    workspaceEntries,
+  ]);
 
   const composerMenuOpen = Boolean(base.composerTrigger);
   const activeComposerMenuItem = useMemo(

@@ -1,3 +1,4 @@
+import { FileIcon } from "lucide-react";
 import { memo, type ReactNode } from "react";
 import { TerminalContextInlineChip } from "../terminal/TerminalContextInlineChip";
 import {
@@ -6,6 +7,61 @@ import {
   textContainsInlineTerminalContextLabels,
 } from "../common/userMessageTerminalContexts";
 import { type ParsedTerminalContextEntry } from "~/lib/terminalContext";
+import { splitPromptIntoComposerSegments } from "../../../logic/composer";
+import {
+  COMPOSER_INLINE_CHIP_CLASS_NAME,
+  COMPOSER_INLINE_CHIP_LABEL_CLASS_NAME,
+} from "../view/composerInlineChip";
+import { cn } from "~/lib/utils";
+
+const USER_MESSAGE_MENTION_BADGE_CLASS_NAME =
+  "inline-flex shrink-0 rounded-sm border border-border/70 bg-background/60 px-1 py-0 text-[10px] font-semibold uppercase leading-none text-muted-foreground";
+
+const UserMessageMentionChip = memo(function UserMessageMentionChip(props: {
+  label: string;
+  mentionKind: "path" | "agent" | "skill";
+}) {
+  return (
+    <span className={cn(COMPOSER_INLINE_CHIP_CLASS_NAME, "mx-[1px]")}>
+      {props.mentionKind === "path" ? (
+        <FileIcon className="size-3.5 shrink-0 opacity-85" />
+      ) : (
+        <span className={USER_MESSAGE_MENTION_BADGE_CLASS_NAME}>{props.mentionKind}</span>
+      )}
+      <span className={COMPOSER_INLINE_CHIP_LABEL_CLASS_NAME}>{props.label}</span>
+    </span>
+  );
+});
+
+function renderUserMessageTextWithMentionChips(text: string): ReactNode {
+  const segments = splitPromptIntoComposerSegments(text, [], {
+    allowTrailingAgentAndSkillMentions: true,
+  });
+  if (segments.length === 0) {
+    return text;
+  }
+
+  let textKeyIndex = 0;
+  let mentionKeyIndex = 0;
+
+  return segments.map((segment) => {
+    if (segment.type === "text") {
+      textKeyIndex += 1;
+      return <span key={`user-message-text:${textKeyIndex}:${segment.text}`}>{segment.text}</span>;
+    }
+    if (segment.type === "mention") {
+      mentionKeyIndex += 1;
+      return (
+        <UserMessageMentionChip
+          key={`user-message-mention:${mentionKeyIndex}:${segment.rawValue}`}
+          label={segment.displayLabel}
+          mentionKind={segment.mentionKind}
+        />
+      );
+    }
+    return null;
+  });
+}
 
 const UserMessageTerminalContextInlineLabel = memo(
   function UserMessageTerminalContextInlineLabel(props: { context: ParsedTerminalContextEntry }) {
@@ -88,7 +144,11 @@ export const UserMessageBody = memo(function UserMessageBody(props: {
     }
 
     if (props.text.length > 0) {
-      inlineNodes.push(<span key="user-message-terminal-context-inline-text">{props.text}</span>);
+      inlineNodes.push(
+        <span key="user-message-terminal-context-inline-text">
+          {renderUserMessageTextWithMentionChips(props.text)}
+        </span>,
+      );
     } else if (inlinePrefix.length === 0) {
       return null;
     }
@@ -106,7 +166,7 @@ export const UserMessageBody = memo(function UserMessageBody(props: {
 
   return (
     <p className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed text-foreground">
-      {props.text}
+      {renderUserMessageTextWithMentionChips(props.text)}
     </p>
   );
 });

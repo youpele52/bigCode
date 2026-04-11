@@ -61,7 +61,6 @@ export function useChatViewEffects({ base, composer, thread, runtime }: ChatView
     activePendingProgress,
     activePendingUserInput,
     isOpencodePendingUserInputMode,
-    phase,
     resetLocalDispatch,
   } = thread;
   const { closePullRequestDialog, focusComposer } = runtime;

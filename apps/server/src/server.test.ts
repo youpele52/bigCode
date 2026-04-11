@@ -55,6 +55,10 @@ import {
   type ProviderRegistryShape,
 } from "./provider/Services/ProviderRegistry.ts";
 import {
+  DiscoveryRegistry,
+  type DiscoveryRegistryShape,
+} from "./provider/Services/DiscoveryRegistry.ts";
+import {
   ServerLifecycleEvents,
   type ServerLifecycleEventsShape,
 } from "./startup/serverLifecycleEvents.ts";
@@ -137,6 +141,7 @@ const buildAppUnderTest = (options?: {
   layers?: {
     keybindings?: Partial<KeybindingsShape>;
     providerRegistry?: Partial<ProviderRegistryShape>;
+    discoveryRegistry?: Partial<DiscoveryRegistryShape>;
     serverSettings?: Partial<ServerSettingsShape>;
     open?: Partial<OpenShape>;
     gitCore?: Partial<GitCoreShape>;
@@ -199,6 +204,14 @@ const buildAppUnderTest = (options?: {
           refresh: () => Effect.succeed([]),
           streamChanges: Stream.empty,
           ...options?.layers?.providerRegistry,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(DiscoveryRegistry)({
+          getCatalog: Effect.succeed({ agents: [], skills: [] }),
+          refresh: () => Effect.succeed({ agents: [], skills: [] }),
+          streamChanges: Stream.empty,
+          ...options?.layers?.discoveryRegistry,
         }),
       ),
       Layer.provide(

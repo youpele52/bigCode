@@ -56,6 +56,10 @@ const baseServerConfig: ServerConfig = {
   keybindings: [],
   issues: [],
   providers: defaultProviders,
+  discovery: {
+    agents: [],
+    skills: [],
+  },
   availableEditors: ["cursor"],
   observability: {
     logsDirectoryPath: "/tmp/workspace/.config/logs",
@@ -133,6 +137,7 @@ describe("serverState", () => {
       {
         issues: [],
         providers: defaultProviders,
+        discovery: { agents: [], skills: [] },
         settings: DEFAULT_SERVER_SETTINGS,
       },
       "snapshot",
@@ -144,6 +149,7 @@ describe("serverState", () => {
       {
         issues: [],
         providers: defaultProviders,
+        discovery: { agents: [], skills: [] },
         settings: DEFAULT_SERVER_SETTINGS,
       },
       "snapshot",
@@ -285,6 +291,7 @@ describe("serverState", () => {
       {
         issues: [{ kind: "keybindings.malformed-config", message: "bad json" }],
         providers: defaultProviders,
+        discovery: { agents: [], skills: [] },
         settings: DEFAULT_SERVER_SETTINGS,
       },
       "keybindingsUpdated",
@@ -294,6 +301,7 @@ describe("serverState", () => {
       {
         issues: [{ kind: "keybindings.malformed-config", message: "bad json" }],
         providers: nextProviders,
+        discovery: { agents: [], skills: [] },
         settings: DEFAULT_SERVER_SETTINGS,
       },
       "providerStatuses",
@@ -302,6 +310,7 @@ describe("serverState", () => {
       {
         issues: [{ kind: "keybindings.malformed-config", message: "bad json" }],
         providers: nextProviders,
+        discovery: { agents: [], skills: [] },
         settings: {
           ...DEFAULT_SERVER_SETTINGS,
           enableAssistantStreaming: true,

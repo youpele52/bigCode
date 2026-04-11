@@ -103,7 +103,7 @@ export function useLocalStorage<T, E>(
   schema: Schema.Codec<T, E>,
   options?: LocalStorageOptions,
 ): [T, (value: T | ((val: T) => T)) => void] {
-  const legacyKeys = options?.legacyKeys ?? [];
+  const legacyKeys = options?.legacyKeys;
 
   // Get the initial value from localStorage or use the provided initialValue
   const [storedValue, setStoredValue] = useState<T>(() => {
@@ -165,7 +165,7 @@ export function useLocalStorage<T, E>(
     };
 
     const handleStorageChange = (event: StorageEvent) => {
-      if (event.key === key || (event.key !== null && legacyKeys.includes(event.key))) {
+      if (event.key === key || (event.key !== null && Boolean(legacyKeys?.includes(event.key)))) {
         syncFromStorage();
       }
     };

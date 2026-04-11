@@ -5,18 +5,7 @@ import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import { PlainTextPlugin } from "@lexical/react/LexicalPlainTextPlugin";
-import {
-  $getRoot,
-  COMMAND_PRIORITY_HIGH,
-  KEY_ARROW_DOWN_COMMAND,
-  KEY_ARROW_LEFT_COMMAND,
-  KEY_ARROW_RIGHT_COMMAND,
-  KEY_ARROW_UP_COMMAND,
-  KEY_BACKSPACE_COMMAND,
-  KEY_ENTER_COMMAND,
-  KEY_TAB_COMMAND,
-  type EditorState,
-} from "lexical";
+import { $getRoot, type EditorState } from "lexical";
 import {
   forwardRef,
   useCallback,
@@ -39,7 +28,6 @@ import { type TerminalContextDraft } from "~/lib/terminalContext";
 import { cn } from "~/lib/utils";
 import { ComposerMentionNode, ComposerTerminalContextNode } from "./ComposerPromptEditor.nodes";
 import {
-  $getComposerRootLength,
   $readExpandedSelectionOffsetFromEditorState,
   $readSelectionOffsetFromEditorState,
   $setComposerEditorPrompt,

@@ -38,6 +38,7 @@ import {
   observeRpcStreamEffect,
 } from "../observability/RpcInstrumentation";
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry";
+import { DiscoveryRegistry } from "../provider/Services/DiscoveryRegistry";
 import { ServerLifecycleEvents } from "../startup/serverLifecycleEvents";
 import { ServerRuntimeStartup } from "../startup/serverRuntimeStartup";
 import { ServerSettingsService } from "./serverSettings";
@@ -64,6 +65,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
     const gitStatusBroadcaster = yield* GitStatusBroadcaster;
     const terminalManager = yield* TerminalManager;
     const providerRegistry = yield* ProviderRegistry;
+    const discoveryRegistry = yield* DiscoveryRegistry;
     const config = yield* ServerConfig;
     const lifecycleEvents = yield* ServerLifecycleEvents;
     const serverSettings = yield* ServerSettingsService;
@@ -148,6 +150,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
     const loadServerConfig = Effect.gen(function* () {
       const keybindingsConfig = yield* keybindings.loadConfigState;
       const providers = yield* providerRegistry.getProviders;
+      const discovery = yield* discoveryRegistry.getCatalog;
       const settings = yield* serverSettings.getSettings;
 
       return {
@@ -156,6 +159,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         keybindings: keybindingsConfig.keybindings,
         issues: keybindingsConfig.issues,
         providers,
+        discovery,
         availableEditors: resolveAvailableEditors(),
         observability: {
           logsDirectoryPath: config.logsDir,
@@ -459,6 +463,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
             loadServerConfig,
             keybindings,
             providerRegistry,
+            discoveryRegistry,
             serverSettings,
           }),
           { "rpc.aggregate": "server" },

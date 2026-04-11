@@ -17,6 +17,10 @@ function createBaseServerConfig(): ServerConfig {
     keybindings: [],
     issues: [],
     providers: [],
+    discovery: {
+      agents: [],
+      skills: [],
+    },
     availableEditors: ["cursor"],
     observability: {
       logsDirectoryPath: "/repo/project/.t3/logs",

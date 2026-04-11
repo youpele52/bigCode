@@ -76,6 +76,42 @@ export type ServerProvider = typeof ServerProvider.Type;
 export const ServerProviders = Schema.Array(ServerProvider);
 export type ServerProviders = typeof ServerProviders.Type;
 
+export const ServerDiscoverySource = Schema.Literals([
+  "project",
+  "user",
+  "system",
+  "plugin",
+  "config",
+]);
+export type ServerDiscoverySource = typeof ServerDiscoverySource.Type;
+
+const ServerDiscoveredEntryBase = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  provider: ProviderKind,
+  name: TrimmedNonEmptyString,
+  source: ServerDiscoverySource,
+  description: Schema.optional(TrimmedNonEmptyString),
+  sourcePath: Schema.optional(TrimmedNonEmptyString),
+});
+
+export const ServerDiscoveredAgent = ServerDiscoveredEntryBase;
+export type ServerDiscoveredAgent = typeof ServerDiscoveredAgent.Type;
+
+export const ServerDiscoveredAgents = Schema.Array(ServerDiscoveredAgent);
+export type ServerDiscoveredAgents = typeof ServerDiscoveredAgents.Type;
+
+export const ServerDiscoveredSkill = ServerDiscoveredEntryBase;
+export type ServerDiscoveredSkill = typeof ServerDiscoveredSkill.Type;
+
+export const ServerDiscoveredSkills = Schema.Array(ServerDiscoveredSkill);
+export type ServerDiscoveredSkills = typeof ServerDiscoveredSkills.Type;
+
+export const ServerDiscoveryCatalog = Schema.Struct({
+  agents: ServerDiscoveredAgents,
+  skills: ServerDiscoveredSkills,
+});
+export type ServerDiscoveryCatalog = typeof ServerDiscoveryCatalog.Type;
+
 export const ServerObservability = Schema.Struct({
   logsDirectoryPath: TrimmedNonEmptyString,
   localTracingEnabled: Schema.Boolean,
@@ -92,6 +128,7 @@ export const ServerConfig = Schema.Struct({
   keybindings: ResolvedKeybindingsConfig,
   issues: ServerConfigIssues,
   providers: ServerProviders,
+  discovery: ServerDiscoveryCatalog,
   availableEditors: Schema.Array(EditorId),
   observability: ServerObservability,
   settings: ServerSettings,
@@ -110,6 +147,7 @@ export type ServerUpsertKeybindingResult = typeof ServerUpsertKeybindingResult.T
 export const ServerConfigUpdatedPayload = Schema.Struct({
   issues: ServerConfigIssues,
   providers: ServerProviders,
+  discovery: ServerDiscoveryCatalog,
   settings: Schema.optional(ServerSettings),
 });
 export type ServerConfigUpdatedPayload = typeof ServerConfigUpdatedPayload.Type;
@@ -124,6 +162,11 @@ export const ServerConfigProviderStatusesPayload = Schema.Struct({
   providers: ServerProviders,
 });
 export type ServerConfigProviderStatusesPayload = typeof ServerConfigProviderStatusesPayload.Type;
+
+export const ServerConfigDiscoveryUpdatedPayload = Schema.Struct({
+  discovery: ServerDiscoveryCatalog,
+});
+export type ServerConfigDiscoveryUpdatedPayload = typeof ServerConfigDiscoveryUpdatedPayload.Type;
 
 export const ServerConfigSettingsUpdatedPayload = Schema.Struct({
   settings: ServerSettings,
@@ -161,11 +204,20 @@ export const ServerConfigStreamSettingsUpdatedEvent = Schema.Struct({
 export type ServerConfigStreamSettingsUpdatedEvent =
   typeof ServerConfigStreamSettingsUpdatedEvent.Type;
 
+export const ServerConfigStreamDiscoveryUpdatedEvent = Schema.Struct({
+  version: Schema.Literal(1),
+  type: Schema.Literal("discoveryUpdated"),
+  payload: ServerConfigDiscoveryUpdatedPayload,
+});
+export type ServerConfigStreamDiscoveryUpdatedEvent =
+  typeof ServerConfigStreamDiscoveryUpdatedEvent.Type;
+
 export const ServerConfigStreamEvent = Schema.Union([
   ServerConfigStreamSnapshotEvent,
   ServerConfigStreamKeybindingsUpdatedEvent,
   ServerConfigStreamProviderStatusesEvent,
   ServerConfigStreamSettingsUpdatedEvent,
+  ServerConfigStreamDiscoveryUpdatedEvent,
 ]);
 export type ServerConfigStreamEvent = typeof ServerConfigStreamEvent.Type;
 

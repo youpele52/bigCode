@@ -1,4 +1,9 @@
-import { type ProjectEntry, type ProviderKind } from "@bigcode/contracts";
+import {
+  type ProjectEntry,
+  type ProviderKind,
+  type ServerDiscoveredAgent,
+  type ServerDiscoveredSkill,
+} from "@bigcode/contracts";
 import { memo, useLayoutEffect, useRef } from "react";
 import { type ComposerSlashCommand, type ComposerTriggerKind } from "../../../logic/composer";
 import { BotIcon } from "lucide-react";
@@ -29,6 +34,20 @@ export type ComposerCommandItem =
       provider: ProviderKind;
       model: string;
       subProviderID?: string | undefined;
+      label: string;
+      description: string;
+    }
+  | {
+      id: string;
+      type: "agent";
+      agent: ServerDiscoveredAgent;
+      label: string;
+      description: string;
+    }
+  | {
+      id: string;
+      type: "skill";
+      skill: ServerDiscoveredSkill;
       label: string;
       description: string;
     };
@@ -83,7 +102,7 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
             {props.isLoading
               ? "Searching workspace files..."
               : props.triggerKind === "path"
-                ? "No matching files or folders."
+                ? "No matching agents, files, or folders."
                 : "No matching command."}
           </p>
         )}
@@ -130,6 +149,16 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
       {props.item.type === "model" ? (
         <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
           model
+        </Badge>
+      ) : null}
+      {props.item.type === "agent" ? (
+        <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+          agent
+        </Badge>
+      ) : null}
+      {props.item.type === "skill" ? (
+        <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+          skill
         </Badge>
       ) : null}
       <span className="flex min-w-0 items-center gap-1.5 truncate">

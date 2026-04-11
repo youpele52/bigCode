@@ -3,7 +3,6 @@ import {
   DecoratorNode,
   TextNode,
   type EditorConfig,
-  type LexicalNode,
   type NodeKey,
   type SerializedLexicalNode,
   type SerializedTextNode,
@@ -32,7 +31,9 @@ import { ComposerPendingTerminalContextChip } from "./ComposerPendingTerminalCon
 
 export type SerializedComposerMentionNode = Spread<
   {
-    path: string;
+    rawValue: string;
+    displayLabel: string;
+    mentionKind: "path" | "agent" | "skill";
     type: "composer-mention";
     version: 1;
   },
@@ -57,23 +58,41 @@ function resolvedThemeFromDocument(): "light" | "dark" {
 }
 
 export function renderMentionChipDom(container: HTMLElement, pathValue: string): void {
+  renderMentionChipDomWithLabel(container, pathValue, basenameOfPath(pathValue));
+}
+
+export function renderMentionChipDomWithLabel(
+  container: HTMLElement,
+  pathValue: string,
+  labelValue: string,
+  mentionKind: "path" | "agent" | "skill" = "path",
+): void {
   container.textContent = "";
   container.style.setProperty("user-select", "none");
   container.style.setProperty("-webkit-user-select", "none");
 
-  const theme = resolvedThemeFromDocument();
-  const icon = document.createElement("img");
-  icon.alt = "";
-  icon.ariaHidden = "true";
-  icon.className = COMPOSER_INLINE_CHIP_ICON_CLASS_NAME;
-  icon.loading = "lazy";
-  icon.src = getVscodeIconUrlForEntry(pathValue, inferEntryKindFromPath(pathValue), theme);
+  if (mentionKind === "path") {
+    const theme = resolvedThemeFromDocument();
+    const icon = document.createElement("img");
+    icon.alt = "";
+    icon.ariaHidden = "true";
+    icon.className = COMPOSER_INLINE_CHIP_ICON_CLASS_NAME;
+    icon.loading = "lazy";
+    icon.src = getVscodeIconUrlForEntry(pathValue, inferEntryKindFromPath(pathValue), theme);
+    container.append(icon);
+  } else {
+    const badge = document.createElement("span");
+    badge.className =
+      "inline-flex shrink-0 rounded-sm border border-border/70 bg-background/60 px-1 py-0 text-[10px] font-semibold uppercase leading-none text-muted-foreground";
+    badge.textContent = mentionKind;
+    container.append(badge);
+  }
 
   const label = document.createElement("span");
   label.className = COMPOSER_INLINE_CHIP_LABEL_CLASS_NAME;
-  label.textContent = basenameOfPath(pathValue);
+  label.textContent = labelValue;
 
-  container.append(icon, label);
+  container.append(label);
 }
 
 // ---------------------------------------------------------------------------
@@ -81,30 +100,59 @@ export function renderMentionChipDom(container: HTMLElement, pathValue: string):
 // ---------------------------------------------------------------------------
 
 export class ComposerMentionNode extends TextNode {
-  __path: string;
+  __rawValue: string;
+  __displayLabel: string;
+  __mentionKind: "path" | "agent" | "skill";
 
   static override getType(): string {
     return "composer-mention";
   }
 
   static override clone(node: ComposerMentionNode): ComposerMentionNode {
-    return new ComposerMentionNode(node.__path, node.__key);
+    return new ComposerMentionNode(
+      {
+        rawValue: node.__rawValue,
+        displayLabel: node.__displayLabel,
+        mentionKind: node.__mentionKind,
+      },
+      node.__key,
+    );
   }
 
   static override importJSON(serializedNode: SerializedComposerMentionNode): ComposerMentionNode {
-    return $createComposerMentionNode(serializedNode.path);
+    return $createComposerMentionNode({
+      rawValue: serializedNode.rawValue,
+      displayLabel: serializedNode.displayLabel,
+      mentionKind: serializedNode.mentionKind,
+    });
   }
 
-  constructor(path: string, key?: NodeKey) {
-    const normalizedPath = path.startsWith("@") ? path.slice(1) : path;
-    super(`@${normalizedPath}`, key);
-    this.__path = normalizedPath;
+  constructor(
+    input:
+      | string
+      | {
+          rawValue: string;
+          displayLabel?: string;
+          mentionKind?: "path" | "agent" | "skill";
+        },
+    key?: NodeKey,
+  ) {
+    const rawValue = typeof input === "string" ? input : input.rawValue;
+    const normalizedRawValue = rawValue.startsWith("@") ? rawValue.slice(1) : rawValue;
+    const displayLabel = typeof input === "string" ? rawValue : (input.displayLabel ?? rawValue);
+    const mentionKind = typeof input === "string" ? "path" : (input.mentionKind ?? "path");
+    super(`@${normalizedRawValue}`, key);
+    this.__rawValue = normalizedRawValue;
+    this.__displayLabel = displayLabel;
+    this.__mentionKind = mentionKind;
   }
 
   override exportJSON(): SerializedComposerMentionNode {
     return {
       ...super.exportJSON(),
-      path: this.__path,
+      rawValue: this.__rawValue,
+      displayLabel: this.__displayLabel,
+      mentionKind: this.__mentionKind,
       type: "composer-mention",
       version: 1,
     };
@@ -115,7 +163,7 @@ export class ComposerMentionNode extends TextNode {
     dom.className = COMPOSER_INLINE_CHIP_CLASS_NAME;
     dom.contentEditable = "false";
     dom.setAttribute("spellcheck", "false");
-    renderMentionChipDom(dom, this.__path);
+    renderMentionChipDomWithLabel(dom, this.__rawValue, this.__displayLabel, this.__mentionKind);
     return dom;
   }
 
@@ -125,8 +173,13 @@ export class ComposerMentionNode extends TextNode {
     _config: EditorConfig,
   ): boolean {
     dom.contentEditable = "false";
-    if (prevNode.__text !== this.__text || prevNode.__path !== this.__path) {
-      renderMentionChipDom(dom, this.__path);
+    if (
+      prevNode.__text !== this.__text ||
+      prevNode.__rawValue !== this.__rawValue ||
+      prevNode.__displayLabel !== this.__displayLabel ||
+      prevNode.__mentionKind !== this.__mentionKind
+    ) {
+      renderMentionChipDomWithLabel(dom, this.__rawValue, this.__displayLabel, this.__mentionKind);
     }
     return false;
   }
@@ -148,8 +201,16 @@ export class ComposerMentionNode extends TextNode {
   }
 }
 
-export function $createComposerMentionNode(path: string): ComposerMentionNode {
-  return $applyNodeReplacement(new ComposerMentionNode(path));
+export function $createComposerMentionNode(
+  input:
+    | string
+    | {
+        rawValue: string;
+        displayLabel?: string;
+        mentionKind?: "path" | "agent" | "skill";
+      },
+): ComposerMentionNode {
+  return $applyNodeReplacement(new ComposerMentionNode(input));
 }
 
 // ---------------------------------------------------------------------------

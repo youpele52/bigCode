@@ -37,15 +37,11 @@ export interface GitBranchOps {
 
 export function makeGitBranchOps(
   helpers: GitHelpers,
-  statusOps: Pick<
-    GitStatusOpsResult,
-    "branchExists" | "originRemoteExists" | "resolveCurrentUpstream" | "resolvePrimaryRemoteName"
-  >,
+  statusOps: Pick<GitStatusOpsResult, "branchExists">,
   fileSystem: FileSystem.FileSystem,
 ): GitBranchOps {
   const { executeGit, runGit, runGitStdout } = helpers;
-  const { branchExists, originRemoteExists, resolveCurrentUpstream, resolvePrimaryRemoteName } =
-    statusOps;
+  const { branchExists } = statusOps;
 
   const readBranchRecency = Effect.fn("readBranchRecency")(function* (cwd: string) {
     const branchRecency = yield* executeGit(

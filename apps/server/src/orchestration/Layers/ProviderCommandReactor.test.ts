@@ -36,6 +36,8 @@ import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { ProviderCommandReactor } from "../Services/ProviderCommandReactor.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
+import { DiscoveryRegistry } from "../../provider/Services/DiscoveryRegistry.ts";
+import { WorkspacePathsLive } from "../../workspace/Layers/WorkspacePaths.ts";
 
 const asProjectId = (value: string): ProjectId => ProjectId.makeUnsafe(value);
 const asApprovalRequestId = (value: string): ApprovalRequestId =>
@@ -224,6 +226,13 @@ describe("ProviderCommandReactor", () => {
     const layer = ProviderCommandReactorLive.pipe(
       Layer.provideMerge(orchestrationLayer),
       Layer.provideMerge(Layer.succeed(ProviderService, service)),
+      Layer.provideMerge(
+        Layer.succeed(DiscoveryRegistry, {
+          getCatalog: Effect.succeed({ agents: [], skills: [] }),
+          refresh: () => Effect.succeed({ agents: [], skills: [] }),
+          streamChanges: Stream.empty,
+        }),
+      ),
       Layer.provideMerge(Layer.succeed(GitCore, { renameBranch } as unknown as GitCoreShape)),
       Layer.provideMerge(
         Layer.mock(TextGeneration, {
@@ -233,6 +242,7 @@ describe("ProviderCommandReactor", () => {
       ),
       Layer.provideMerge(ServerSettingsService.layerTest()),
       Layer.provideMerge(ServerConfig.layerTest(process.cwd(), baseDir)),
+      Layer.provideMerge(WorkspacePathsLive),
       Layer.provideMerge(NodeServices.layer),
     );
     const runtime = ManagedRuntime.make(layer);
@@ -323,6 +333,97 @@ describe("ProviderCommandReactor", () => {
     const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
     expect(thread?.session?.threadId).toBe("thread-1");
     expect(thread?.session?.runtimeMode).toBe("approval-required");
+  });
+
+  it("expands compact agent mentions for provider input while keeping stored user text compact", async () => {
+    const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), "t3code-reactor-agent-"));
+    createdBaseDirs.add(baseDir);
+    const agentDir = path.join(baseDir, ".codex", "agents");
+    fs.mkdirSync(agentDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(agentDir, "clarifier.md"),
+      [
+        "---",
+        "name: clarifier",
+        "description: Ask focused clarifying questions before acting.",
+        "---",
+        "Always identify ambiguity, then ask the smallest useful follow-up question.",
+      ].join("\n"),
+      "utf8",
+    );
+    const harness = await createHarness({ baseDir });
+    const now = new Date().toISOString();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-agent-expand"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-agent-expand"),
+          role: "user",
+          text: "Use @agent::clarifier to inspect this issue",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+
+    const sendInput = harness.sendTurn.mock.calls[0]?.[0] as { input?: string } | undefined;
+    expect(sendInput?.input).toContain("Original user message:");
+    expect(sendInput?.input).toContain("Use @agent::clarifier to inspect this issue");
+    expect(sendInput?.input).toContain("Referenced agent: clarifier");
+    expect(sendInput?.input).toContain("Provider: codex");
+    expect(sendInput?.input).toContain("Ask focused clarifying questions before acting.");
+    expect(sendInput?.input).toContain(
+      "Always identify ambiguity, then ask the smallest useful follow-up question.",
+    );
+
+    const readModel = await Effect.runPromise(harness.engine.getReadModel());
+    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
+    expect(thread?.messages.at(-1)?.text).toBe("Use @agent::clarifier to inspect this issue");
+  });
+
+  it("expands referenced workspace files for provider input", async () => {
+    const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), "t3code-reactor-path-"));
+    createdBaseDirs.add(baseDir);
+    const srcDir = path.join(baseDir, "src");
+    fs.mkdirSync(srcDir, { recursive: true });
+    fs.writeFileSync(path.join(srcDir, "demo.ts"), "export const demo = 42;\n", "utf8");
+    const harness = await createHarness({ baseDir });
+    const now = new Date().toISOString();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-path-expand"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-path-expand"),
+          role: "user",
+          text: "Check @src/demo.ts before changing it",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+
+    const sendInput = harness.sendTurn.mock.calls[0]?.[0] as { input?: string } | undefined;
+    expect(sendInput?.input).toContain("Referenced file: src/demo.ts");
+    expect(sendInput?.input).toContain("File contents:");
+    expect(sendInput?.input).toContain("export const demo = 42;");
+
+    const readModel = await Effect.runPromise(harness.engine.getReadModel());
+    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
+    expect(thread?.messages.at(-1)?.text).toBe("Check @src/demo.ts before changing it");
   });
 
   it("rebuilds transcript context on the next turn when the provider session was lost", async () => {

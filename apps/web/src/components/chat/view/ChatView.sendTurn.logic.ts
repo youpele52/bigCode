@@ -192,7 +192,9 @@ export function useOnSend(input: UseOnSendInput) {
         ? parseStandaloneComposerSlashCommand(trimmedPrompt)
         : null;
     if (standaloneSlashCommand) {
-      inputRef.current.handleInteractionModeChange(standaloneSlashCommand);
+      if (standaloneSlashCommand === "plan" || standaloneSlashCommand === "default") {
+        inputRef.current.handleInteractionModeChange(standaloneSlashCommand);
+      }
       pRef.current = "";
       inputRef.current.clearComposerDraftContent(thread.id);
       inputRef.current.setComposerHighlightedItemId(null);

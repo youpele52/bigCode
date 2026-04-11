@@ -77,18 +77,20 @@ function shouldRebuildProviderContextFromTranscript(input: {
 
 function buildResumedTurnInput(input: {
   readonly transcriptThread: OrchestrationThread;
-  readonly messageText: string;
+  readonly latestTranscriptMessageText: string;
+  readonly latestProviderInputText: string;
 }): string {
   const previousMessages = input.transcriptThread.messages.filter(
     (message): message is OrchestrationMessage => message.role !== "system",
   );
   const transcriptMessages =
-    previousMessages.at(-1)?.role === "user" && previousMessages.at(-1)?.text === input.messageText
+    previousMessages.at(-1)?.role === "user" &&
+    previousMessages.at(-1)?.text === input.latestTranscriptMessageText
       ? previousMessages.slice(0, -1)
       : previousMessages;
   return buildBootstrapInput(
     transcriptMessages,
-    input.messageText,
+    input.latestProviderInputText,
     PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
   ).text;
 }
@@ -129,12 +131,10 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
       requestedModelSelection !== undefined &&
       requestedModelSelection.provider !== threadProvider
     ) {
-      return yield* Effect.fail(
-        new ProviderValidationError({
-          operation: "ProviderCommandReactor.ensureSessionForThread",
-          issue: `Thread '${threadId}' cannot switch to '${requestedModelSelection.provider}' while bound to '${threadProvider}'.`,
-        }),
-      );
+      return yield* new ProviderValidationError({
+        operation: "ProviderCommandReactor.ensureSessionForThread",
+        issue: `Thread '${threadId}' cannot switch to '${requestedModelSelection.provider}' while bound to '${threadProvider}'.`,
+      });
     }
     const effectiveCwd = resolveThreadWorkspaceCwd({
       thread,
@@ -254,6 +254,7 @@ export const sendTurnForThread = (services: SessionOpServices) =>
   Effect.fn("sendTurnForThread")(function* (input: {
     readonly threadId: ThreadId;
     readonly messageText: string;
+    readonly providerInputText?: string;
     readonly attachments?: ReadonlyArray<ChatAttachment>;
     readonly modelSelection?: ModelSelection;
     readonly interactionMode?: "default" | "plan";
@@ -309,9 +310,10 @@ export const sendTurnForThread = (services: SessionOpServices) =>
       shouldBootstrapFromTranscript
         ? buildResumedTurnInput({
             transcriptThread: bootstrapThread ?? thread,
-            messageText: input.messageText,
+            latestTranscriptMessageText: input.messageText,
+            latestProviderInputText: input.providerInputText ?? input.messageText,
           })
-        : input.messageText,
+        : (input.providerInputText ?? input.messageText),
     );
     const sessionModelSwitch =
       activeSession === undefined

@@ -5,21 +5,22 @@
  * ProviderCommandReactor.ts after events arrive from the orchestration stream.
  */
 import {
-  CommandId,
   EventId,
   type ModelSelection,
   type OrchestrationSession,
   ThreadId,
   type TurnId,
 } from "@bigcode/contracts";
-import { Cache, Cause, Duration, Effect, Option, Scope } from "effect";
+import { Cache, Cause, Duration, Effect, FileSystem, Option, Scope } from "effect";
 
 import { GitCore } from "../../git/Services/GitCore.ts";
 import { increment, orchestrationEventsProcessedTotal } from "../../observability/Metrics.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
+import { DiscoveryRegistry } from "../../provider/Services/DiscoveryRegistry.ts";
 import { TextGeneration } from "../../git/Services/TextGeneration.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
+import { WorkspacePaths } from "../../workspace/Services/WorkspacePaths.ts";
 import {
   canReplaceThreadTitle,
   DEFAULT_RUNTIME_MODE,
@@ -30,6 +31,7 @@ import {
   serverCommandId,
   stalePendingRequestDetail,
 } from "./ProviderCommandReactorHelpers.ts";
+import { expandProviderInputMentions } from "./ProviderCommandReactorInputExpansion.ts";
 import {
   ensureSessionForThread,
   maybeGenerateAndRenameWorktreeBranchForFirstTurn,
@@ -63,9 +65,12 @@ export type ProviderCommandHandlers =
 export const makeProviderCommandHandlers = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
   const providerService = yield* ProviderService;
+  const discoveryRegistry = yield* DiscoveryRegistry;
   const git = yield* GitCore;
   const textGeneration = yield* TextGeneration;
   const serverSettingsService = yield* ServerSettingsService;
+  const workspacePaths = yield* WorkspacePaths;
+  const fileSystem = yield* FileSystem.FileSystem;
   const handledTurnStartKeys = yield* Cache.make<string, true>({
     capacity: HANDLED_TURN_START_KEY_MAX,
     timeToLive: Duration.minutes(HANDLED_TURN_START_KEY_TTL_MINUTES),
@@ -145,6 +150,12 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
     resolveThread,
   };
 
+  const expandTurnMessageText = expandProviderInputMentions({
+    discoveryRegistry,
+    fileSystem,
+    workspacePaths,
+  });
+
   const processTurnStartRequested = Effect.fn("processTurnStartRequested")(function* (
     event: Extract<ProviderIntentEvent, { type: "thread.turn-start-requested" }>,
   ) {
@@ -173,6 +184,17 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
 
     const isFirstUserMessageTurn =
       thread.messages.filter((entry) => entry.role === "user").length === 1;
+    const workspaceCwd =
+      resolveThreadWorkspaceCwd({
+        thread,
+        projects: (yield* orchestrationEngine.getReadModel()).projects,
+      }) ?? undefined;
+    const expandedProviderInput = yield* expandTurnMessageText({
+      messageText: message.text,
+      thread,
+      ...(workspaceCwd ? { workspaceRoot: workspaceCwd } : {}),
+    });
+
     if (isFirstUserMessageTurn) {
       const generationCwd =
         resolveThreadWorkspaceCwd({
@@ -204,6 +226,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
     yield* sendTurnForThread(sessionOpServices)({
       threadId: event.payload.threadId,
       messageText: message.text,
+      providerInputText: expandedProviderInput,
       ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
       ...(event.payload.modelSelection !== undefined
         ? { modelSelection: event.payload.modelSelection }

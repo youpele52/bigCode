@@ -13,7 +13,6 @@ import {
   type GitStatusLocalResult,
   type GitStatusRemoteResult,
   type GitStatusStreamEvent,
-  type GitManagerServiceError,
 } from "@bigcode/contracts";
 import { GitCore } from "../Services/GitCore.ts";
 import {
@@ -41,6 +40,17 @@ interface BroadcasterEntry {
   pubSub: PubSub.PubSub<GitStatusStreamEvent>;
   localRef: Ref.Ref<GitStatusLocalResult | null>;
   remoteRef: Ref.Ref<GitStatusRemoteResult | null>;
+}
+
+function emptyLocalResult(): GitStatusLocalResult {
+  return {
+    isRepo: false,
+    hasOriginRemote: false,
+    isDefaultBranch: false,
+    branch: null,
+    hasWorkingTreeChanges: false,
+    workingTree: { files: [], insertions: 0, deletions: 0 },
+  };
 }
 
 // ── Factory ───────────────────────────────────────────────────────────────────
@@ -75,15 +85,6 @@ export const makeGitStatusBroadcaster = Effect.fn("makeGitStatusBroadcaster")(fu
   });
 
   // ── Public API ────────────────────────────────────────────────────────────
-
-  const emptyLocalResult = (): GitStatusLocalResult => ({
-    isRepo: false,
-    hasOriginRemote: false,
-    isDefaultBranch: false,
-    branch: null,
-    hasWorkingTreeChanges: false,
-    workingTree: { files: [], insertions: 0, deletions: 0 },
-  });
 
   const subscribe: GitStatusBroadcasterShape["subscribe"] = Effect.fn("subscribe")(function* (cwd) {
     const entry = yield* getOrCreateEntry(cwd);
