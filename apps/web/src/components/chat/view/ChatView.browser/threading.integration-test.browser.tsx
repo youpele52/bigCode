@@ -1,4 +1,4 @@
-import type { ThreadId } from "@bigcode/contracts";
+import { ORCHESTRATION_WS_METHODS, type ThreadId } from "@bigcode/contracts";
 import { page } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
 
@@ -79,6 +79,70 @@ describe("ChatView threading integration", () => {
       });
     } finally {
       resolveDispatch({ sequence: 2 });
+      await mounted.cleanup();
+    }
+  });
+
+  it("does not send a client-generated first-send thread title", async () => {
+    useComposerDraftStore.setState({
+      draftThreadsByThreadId: {
+        [THREAD_ID]: {
+          projectId: PROJECT_ID,
+          createdAt: "2026-03-04T12:00:00.000Z",
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: "main",
+          worktreePath: null,
+          envMode: "local",
+        },
+      },
+      projectDraftThreadIdByProjectId: { [PROJECT_ID]: THREAD_ID },
+    });
+
+    const mounted = await ctx.mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createDraftOnlySnapshot(),
+      resolveRpc: (body) => {
+        if (body._tag === ORCHESTRATION_WS_METHODS.dispatchCommand) {
+          return { sequence: 2 };
+        }
+        return undefined;
+      },
+    });
+
+    try {
+      useComposerDraftStore
+        .getState()
+        .setPrompt(
+          THREAD_ID,
+          "Please investigate reconnect failures after restarting the session.",
+        );
+      const sendButton = await waitForElement(
+        () => document.querySelector<HTMLButtonElement>('button[aria-label="Send message"]'),
+        "Unable to find send button.",
+      );
+      sendButton.click();
+
+      await vi.waitFor(() => {
+        const turnStartRequest = ctx.wsRequests.find(
+          (request) =>
+            request._tag === ORCHESTRATION_WS_METHODS.dispatchCommand &&
+            request.type === "thread.turn.start",
+        );
+
+        expect(
+          ctx.wsRequests.some(
+            (request) =>
+              request._tag === ORCHESTRATION_WS_METHODS.dispatchCommand &&
+              request.type === "thread.meta.update",
+          ),
+        ).toBe(false);
+        expect(turnStartRequest).toMatchObject({
+          _tag: ORCHESTRATION_WS_METHODS.dispatchCommand,
+          type: "thread.turn.start",
+        });
+      });
+    } finally {
       await mounted.cleanup();
     }
   });

@@ -84,8 +84,7 @@ export function createSnapshotWithLongProposedPlan(): OrchestrationReadModel {
     ...snapshot,
     threads: snapshot.threads.map((thread) =>
       thread.id === THREAD_ID
-        ? {
-            ...thread,
+        ? Object.assign({}, thread, {
             proposedPlans: [
               {
                 id: "plan-browser-test",
@@ -98,7 +97,7 @@ export function createSnapshotWithLongProposedPlan(): OrchestrationReadModel {
               },
             ],
             updatedAt: new Date(Date.parse(NOW_ISO) + 1_001_000).toISOString(),
-          }
+          })
         : thread,
     ),
   };
@@ -114,8 +113,7 @@ export function createSnapshotWithPendingUserInput(): OrchestrationReadModel {
     ...snapshot,
     threads: snapshot.threads.map((thread) =>
       thread.id === THREAD_ID
-        ? {
-            ...thread,
+        ? Object.assign({}, thread, {
             interactionMode: "plan",
             activities: [
               {
@@ -161,7 +159,7 @@ export function createSnapshotWithPendingUserInput(): OrchestrationReadModel {
               },
             ],
             updatedAt: NOW_ISO,
-          }
+          })
         : thread,
     ),
   };
@@ -181,8 +179,7 @@ export function createSnapshotWithPlanFollowUpPrompt(): OrchestrationReadModel {
     ...snapshot,
     threads: snapshot.threads.map((thread) =>
       thread.id === THREAD_ID
-        ? {
-            ...thread,
+        ? Object.assign({}, thread, {
             interactionMode: "plan",
             latestTurn: {
               turnId: "turn-plan-follow-up" as TurnId,
@@ -213,7 +210,7 @@ export function createSnapshotWithPlanFollowUpPrompt(): OrchestrationReadModel {
               updatedAt: NOW_ISO,
             },
             updatedAt: NOW_ISO,
-          }
+          })
         : thread,
     ),
   };
@@ -228,11 +225,10 @@ export function buildWorktreeSnapshot(threadId: ThreadId): OrchestrationReadMode
     ...snapshot,
     threads: snapshot.threads.map((thread) =>
       thread.id === threadId
-        ? {
-            ...thread,
+        ? Object.assign({}, thread, {
             branch: "feature/branch",
             worktreePath: "/repo/worktrees/feature-branch",
-          }
+          })
         : thread,
     ),
   };
