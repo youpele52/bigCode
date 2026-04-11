@@ -7,7 +7,6 @@
 import { Cause, Effect, Schema } from "effect";
 import {
   CommandId,
-  EventId,
   ThreadId,
   type OrchestrationCommand,
   OrchestrationDispatchCommandError,

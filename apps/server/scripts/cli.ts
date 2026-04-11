@@ -14,6 +14,9 @@ import { resolveCatalogDependencies } from "../../../scripts/lib/resolve-catalog
 import rootPackageJson from "../../../package.json" with { type: "json" };
 import serverPackageJson from "../package.json" with { type: "json" };
 
+// Keep the Node-run build CLI independent from the contracts source barrel.
+const APP_SERVER_NAME = "bigCode server";
+
 class CliError extends Data.TaggedError("CliError")<{
   readonly message: string;
   readonly cause?: unknown;
@@ -255,7 +258,7 @@ const publishCmd = Command.make(
 // ---------------------------------------------------------------------------
 
 const cli = Command.make("cli").pipe(
-  Command.withDescription("T3 server build & publish CLI."),
+  Command.withDescription(`${APP_SERVER_NAME} build & publish CLI.`),
   Command.withSubcommands([buildCmd, publishCmd]),
 );
 

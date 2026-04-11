@@ -47,7 +47,6 @@ import {
   normalizeUsage,
   requestDetailFromPermissionRequest,
   requestTypeFromPermissionRequest,
-  toMessage,
 } from "./CopilotAdapter.types.ts";
 import { mapEvent, type MapEventDeps } from "./CopilotAdapter.mapEvent.ts";
 import {
@@ -61,7 +60,6 @@ import {
   makeHasSession,
   makeReadThread,
   makeRollbackThread,
-  stopSessionRecord,
 } from "./CopilotAdapter.session.ts";
 
 export { makeNodeWrapperCliPath } from "./CopilotAdapter.types.ts";
@@ -345,13 +343,11 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
       const record = yield* requireSession(threadId);
       const pending = record.pendingApprovals.get(requestId);
       if (!pending) {
-        return yield* Effect.fail(
-          new ProviderAdapterRequestError({
-            provider: PROVIDER,
-            method: "session.permission.respond",
-            detail: `Unknown pending GitHub Copilot approval request '${requestId}'.`,
-          }),
-        );
+        return yield* new ProviderAdapterRequestError({
+          provider: PROVIDER,
+          method: "session.permission.respond",
+          detail: `Unknown pending GitHub Copilot approval request '${requestId}'.`,
+        });
       }
 
       record.pendingApprovals.delete(requestId);
@@ -380,13 +376,11 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
       const record = yield* requireSession(threadId);
       const pending = record.pendingUserInputs.get(requestId);
       if (!pending) {
-        return yield* Effect.fail(
-          new ProviderAdapterRequestError({
-            provider: PROVIDER,
-            method: "session.userInput.respond",
-            detail: `Unknown pending GitHub Copilot user-input request '${requestId}'.`,
-          }),
-        );
+        return yield* new ProviderAdapterRequestError({
+          provider: PROVIDER,
+          method: "session.userInput.respond",
+          detail: `Unknown pending GitHub Copilot user-input request '${requestId}'.`,
+        });
       }
 
       record.pendingUserInputs.delete(requestId);

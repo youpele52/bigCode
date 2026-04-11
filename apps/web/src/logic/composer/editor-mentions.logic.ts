@@ -10,14 +10,49 @@ export type ComposerPromptSegment =
     }
   | {
       type: "mention";
-      path: string;
+      rawValue: string;
+      displayLabel: string;
+      mentionKind: "path" | "agent" | "skill";
     }
   | {
       type: "terminal-context";
       context: TerminalContextDraft | null;
     };
 
-const MENTION_TOKEN_REGEX = /(^|\s)@([^\s@]+)(?=\s)/g;
+interface SplitPromptIntoComposerSegmentsOptions {
+  readonly allowTrailingAgentAndSkillMentions?: boolean;
+}
+
+const MENTION_TOKEN_REGEX = /(^|\s)@([^\s@]+)(?=\s|$)/g;
+
+function parseMentionToken(rawValue: string): {
+  rawValue: string;
+  displayLabel: string;
+  mentionKind: "path" | "agent" | "skill";
+} {
+  if (rawValue.startsWith("agent:") || rawValue.startsWith("agent::")) {
+    const displayLabel = rawValue.replace(/^agent::?/, "");
+    return {
+      rawValue,
+      displayLabel,
+      mentionKind: "agent",
+    };
+  }
+  if (rawValue.startsWith("skill:") || rawValue.startsWith("skill::")) {
+    const displayLabel = rawValue.replace(/^skill::?/, "");
+    return {
+      rawValue,
+      displayLabel,
+      mentionKind: "skill",
+    };
+  }
+  const pathSegments = rawValue.split(/[\\/]/);
+  return {
+    rawValue,
+    displayLabel: pathSegments[pathSegments.length - 1] ?? rawValue,
+    mentionKind: "path",
+  };
+}
 
 function pushTextSegment(segments: ComposerPromptSegment[], text: string): void {
   if (!text) return;
@@ -29,7 +64,20 @@ function pushTextSegment(segments: ComposerPromptSegment[], text: string): void 
   segments.push({ type: "text", text });
 }
 
-function splitPromptTextIntoComposerSegments(text: string): ComposerPromptSegment[] {
+function shouldKeepTrailingMentionAsText(
+  mention: Extract<ComposerPromptSegment, { type: "mention" }>,
+  options: SplitPromptIntoComposerSegmentsOptions,
+): boolean {
+  if (mention.mentionKind === "path") {
+    return true;
+  }
+  return !options.allowTrailingAgentAndSkillMentions;
+}
+
+function splitPromptTextIntoComposerSegments(
+  text: string,
+  options: SplitPromptIntoComposerSegmentsOptions,
+): ComposerPromptSegment[] {
   const segments: ComposerPromptSegment[] = [];
   if (!text) {
     return segments;
@@ -39,7 +87,7 @@ function splitPromptTextIntoComposerSegments(text: string): ComposerPromptSegmen
   for (const match of text.matchAll(MENTION_TOKEN_REGEX)) {
     const fullMatch = match[0];
     const prefix = match[1] ?? "";
-    const path = match[2] ?? "";
+    const rawValue = match[2] ?? "";
     const matchIndex = match.index ?? 0;
     const mentionStart = matchIndex + prefix.length;
     const mentionEnd = mentionStart + fullMatch.length - prefix.length;
@@ -48,8 +96,13 @@ function splitPromptTextIntoComposerSegments(text: string): ComposerPromptSegmen
       pushTextSegment(segments, text.slice(cursor, mentionStart));
     }
 
-    if (path.length > 0) {
-      segments.push({ type: "mention", path });
+    if (rawValue.length > 0) {
+      const mention = { type: "mention" as const, ...parseMentionToken(rawValue) };
+      if (mentionEnd === text.length && shouldKeepTrailingMentionAsText(mention, options)) {
+        pushTextSegment(segments, text.slice(mentionStart, mentionEnd));
+      } else {
+        segments.push(mention);
+      }
     } else {
       pushTextSegment(segments, text.slice(mentionStart, mentionEnd));
     }
@@ -67,6 +120,7 @@ function splitPromptTextIntoComposerSegments(text: string): ComposerPromptSegmen
 export function splitPromptIntoComposerSegments(
   prompt: string,
   terminalContexts: ReadonlyArray<TerminalContextDraft> = [],
+  options: SplitPromptIntoComposerSegmentsOptions = {},
 ): ComposerPromptSegment[] {
   if (!prompt) {
     return [];
@@ -82,7 +136,9 @@ export function splitPromptIntoComposerSegments(
     }
 
     if (index > textCursor) {
-      segments.push(...splitPromptTextIntoComposerSegments(prompt.slice(textCursor, index)));
+      segments.push(
+        ...splitPromptTextIntoComposerSegments(prompt.slice(textCursor, index), options),
+      );
     }
     segments.push({
       type: "terminal-context",
@@ -93,7 +149,7 @@ export function splitPromptIntoComposerSegments(
   }
 
   if (textCursor < prompt.length) {
-    segments.push(...splitPromptTextIntoComposerSegments(prompt.slice(textCursor)));
+    segments.push(...splitPromptTextIntoComposerSegments(prompt.slice(textCursor), options));
   }
 
   return segments;

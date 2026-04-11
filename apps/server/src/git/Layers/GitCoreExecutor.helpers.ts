@@ -13,6 +13,8 @@ import {
   type ExecuteGitResult,
 } from "../Services/GitCore.ts";
 
+const commandLabel = (args: readonly string[]) => `git ${args.join(" ")}`;
+
 // ---------------------------------------------------------------------------
 // ExecuteGitOptions — options for the high-level executeGit helper
 // ---------------------------------------------------------------------------
@@ -68,8 +70,6 @@ export function makeGitHelpers(
   execute: (input: ExecuteGitInput) => Effect.Effect<ExecuteGitResult, GitCommandError>,
 ) {
   const OUTPUT_TRUNCATED_MARKER = "\n\n[truncated]";
-
-  const commandLabel = (args: readonly string[]) => `git ${args.join(" ")}`;
 
   const createGitCommandError = (
     operation: string,

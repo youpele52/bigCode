@@ -56,6 +56,10 @@ function createBaseServerConfig(): ServerConfig {
         models: [],
       },
     ],
+    discovery: {
+      agents: [],
+      skills: [],
+    },
     availableEditors: [],
     observability: {
       logsDirectoryPath: "/repo/project/.t3/logs",

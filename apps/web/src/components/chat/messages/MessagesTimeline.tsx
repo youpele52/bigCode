@@ -447,8 +447,11 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                   )}
                   {question.options.length > 0 && (
                     <ul className="space-y-1 pl-3">
-                      {question.options.map((option, optIndex) => (
-                        <li key={optIndex} className="text-sm text-muted-foreground/70">
+                      {question.options.map((option) => (
+                        <li
+                          key={`${question.id}:${option.label}:${option.description ?? ""}`}
+                          className="text-sm text-muted-foreground/70"
+                        >
                           <span className="font-medium text-foreground/70">{option.label}</span>
                           {option.description ? (
                             <span className="text-muted-foreground/55">

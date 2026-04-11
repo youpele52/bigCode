@@ -341,27 +341,32 @@ export function assembleSnapshot(queries: ProjectionSnapshotQuerySql) {
       deletedAt: row.deletedAt,
     }));
 
-    const threads: ReadonlyArray<OrchestrationThread> = threadRows.map((row) => ({
-      id: row.threadId,
-      projectId: row.projectId,
-      title: row.title,
-      modelSelection: row.modelSelection,
-      runtimeMode: row.runtimeMode,
-      interactionMode: row.interactionMode,
-      branch: row.branch,
-      worktreePath: row.worktreePath,
-      ...(row.parentThread !== null ? { parentThread: row.parentThread } : {}),
-      latestTurn: latestTurnByThread.get(row.threadId) ?? null,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-      archivedAt: row.archivedAt,
-      deletedAt: row.deletedAt,
-      messages: messagesByThread.get(row.threadId) ?? [],
-      proposedPlans: proposedPlansByThread.get(row.threadId) ?? [],
-      activities: activitiesByThread.get(row.threadId) ?? [],
-      checkpoints: checkpointsByThread.get(row.threadId) ?? [],
-      session: sessionsByThread.get(row.threadId) ?? null,
-    }));
+    const threads: ReadonlyArray<OrchestrationThread> = threadRows.map(
+      (row) =>
+        Object.assign(
+          {
+            id: row.threadId,
+            projectId: row.projectId,
+            title: row.title,
+            modelSelection: row.modelSelection,
+            runtimeMode: row.runtimeMode,
+            interactionMode: row.interactionMode,
+            branch: row.branch,
+            worktreePath: row.worktreePath,
+            latestTurn: latestTurnByThread.get(row.threadId) ?? null,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+            archivedAt: row.archivedAt,
+            deletedAt: row.deletedAt,
+            messages: messagesByThread.get(row.threadId) ?? [],
+            proposedPlans: proposedPlansByThread.get(row.threadId) ?? [],
+            activities: activitiesByThread.get(row.threadId) ?? [],
+            checkpoints: checkpointsByThread.get(row.threadId) ?? [],
+            session: sessionsByThread.get(row.threadId) ?? null,
+          },
+          row.parentThread !== null ? { parentThread: row.parentThread } : undefined,
+        ) satisfies OrchestrationThread,
+    );
 
     const snapshot = {
       snapshotSequence: computeSnapshotSequence(stateRows),

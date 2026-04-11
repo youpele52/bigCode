@@ -28,7 +28,6 @@ import type { CheckpointStoreError } from "../../checkpointing/Errors.ts";
 import type {
   CaptureCheckpointInput,
   DiffCheckpointsInput,
-  DeleteCheckpointRefsInput,
   RestoreCheckpointInput,
 } from "../../checkpointing/Services/CheckpointStore.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";

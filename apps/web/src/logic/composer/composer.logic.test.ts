@@ -60,6 +60,50 @@ describe("detectComposerTrigger", () => {
     });
   });
 
+  it("detects the /agents slash command while typing", () => {
+    const text = "/ag";
+
+    expect(detectComposerTrigger(text, text.length)).toEqual({
+      kind: "slash-command",
+      query: "ag",
+      rangeStart: 0,
+      rangeEnd: text.length,
+    });
+  });
+
+  it("detects the /skills slash command while typing", () => {
+    const text = "/sk";
+
+    expect(detectComposerTrigger(text, text.length)).toEqual({
+      kind: "slash-command",
+      query: "sk",
+      rangeStart: 0,
+      rangeEnd: text.length,
+    });
+  });
+
+  it("keeps the /agents discovery menu active after the command is completed", () => {
+    const text = "/agents ";
+
+    expect(detectComposerTrigger(text, text.length)).toEqual({
+      kind: "slash-command",
+      query: "agents ",
+      rangeStart: 0,
+      rangeEnd: text.length,
+    });
+  });
+
+  it("keeps the /skills discovery menu active while filtering entries", () => {
+    const text = "/skills review";
+
+    expect(detectComposerTrigger(text, text.length)).toEqual({
+      kind: "slash-command",
+      query: "skills review",
+      rangeStart: 0,
+      rangeEnd: text.length,
+    });
+  });
+
   it("detects @path trigger in the middle of existing text", () => {
     // User typed @ between "inspect " and "in this sentence"
     const text = "Please inspect @in this sentence";
